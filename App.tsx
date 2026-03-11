@@ -283,7 +283,7 @@ const App: React.FC = () => {
 
       <footer className="py-8 border-t border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-900 text-center transition-colors duration-300">
         <p className="text-slate-400 dark:text-slate-500 text-sm">
-          Built with Gemini 2.5 Pro & React
+          Built with Gemini 3 Flash & React
         </p>
       </footer>
 

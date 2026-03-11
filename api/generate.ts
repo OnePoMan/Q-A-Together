@@ -1,6 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { GoogleGenAI, Type } from '@google/genai';
 
+const PRIMARY_MODEL = 'gemini-3-flash';
+const FALLBACK_MODEL = 'gemini-3.1-flash-lite';
+
 const apiKey = process.env.GEMINI_API_KEY || '';
 const ai = new GoogleGenAI({ apiKey });
 
@@ -38,18 +41,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       prompt += `\n\nIMPORTANT: The following questions have already been asked. DO NOT generate any of these or anything very similar to them:\n${JSON.stringify(recentHistory)}`;
     }
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-pro',
-      contents: prompt,
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.ARRAY,
-          items: { type: Type.STRING },
-        },
-        temperature: 0.9,
+    const config = {
+      responseMimeType: 'application/json' as const,
+      responseSchema: {
+        type: Type.ARRAY,
+        items: { type: Type.STRING },
       },
-    });
+      temperature: 0.9,
+    };
+
+    let response;
+    try {
+      response = await ai.models.generateContent({
+        model: PRIMARY_MODEL,
+        contents: prompt,
+        config,
+      });
+    } catch (primaryError: unknown) {
+      const status = (primaryError as { status?: number }).status;
+      if (status === 429) {
+        console.warn(`Rate limited on ${PRIMARY_MODEL}, falling back to ${FALLBACK_MODEL}`);
+        response = await ai.models.generateContent({
+          model: FALLBACK_MODEL,
+          contents: prompt,
+          config,
+        });
+      } else {
+        throw primaryError;
+      }
+    }
 
     const rawText = response.text;
     if (!rawText) {
