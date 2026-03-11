@@ -52,7 +52,7 @@ const App: React.FC = () => {
           questionsElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
       }
-    } catch {
+    } catch (err) {
       // Fallback to cache on network error
       const cached = getCachedQuestions(20, currentQuestions);
       if (cached.length > 0) {
@@ -60,7 +60,8 @@ const App: React.FC = () => {
         setHasStarted(true);
         setViewMode('generate');
       } else {
-        setError("Couldn't generate questions. Check your connection and try again.");
+        const detail = err instanceof Error ? err.message : '';
+        setError(`Couldn't generate questions. ${detail || 'Check your connection and try again.'}`);
       }
     } finally {
       setIsLoading(false);

@@ -12,7 +12,8 @@ export const generateQuestions = async (previouslyAsked: string[] = []): Promise
   });
 
   if (!response.ok) {
-    throw new Error(`API error: ${response.status}`);
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.details || errorData.error || `API error: ${response.status}`);
   }
 
   const data = await response.json();
