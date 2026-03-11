@@ -59,8 +59,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     } catch (primaryError: unknown) {
       const status = (primaryError as { status?: number }).status;
-      if (status === 429) {
-        console.warn(`Rate limited on ${PRIMARY_MODEL}, falling back to ${FALLBACK_MODEL}`);
+      if (status === 429 || status === 503) {
+        console.warn(`${PRIMARY_MODEL} returned ${status}, falling back to ${FALLBACK_MODEL}`);
         response = await ai.models.generateContent({
           model: FALLBACK_MODEL,
           contents: prompt,
