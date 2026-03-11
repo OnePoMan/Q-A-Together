@@ -1,67 +1,46 @@
-import { GoogleGenAI, Type } from "@google/genai";
-
-const apiKey = process.env.API_KEY || '';
-
-// Initialize the client with the API key
-const ai = new GoogleGenAI({ apiKey });
+const CACHE_KEY = 'qa-cached-questions';
+const MAX_CACHE = 200;
 
 /**
- * Generates a list of questions using the Gemini API.
- * @param previouslyAsked - A list of questions to exclude to prevent repeats.
- * @returns An array of generated question strings.
+ * Generates questions via the serverless API proxy.
  */
 export const generateQuestions = async (previouslyAsked: string[] = []): Promise<string[]> => {
-  if (!apiKey) {
-    throw new Error("API Key not found in environment variables.");
+  const response = await fetch('/api/generate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ previouslyAsked }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`API error: ${response.status}`);
   }
 
-  // Construct the prompt
-  let prompt = `Generate 20 fun, lighthearted, and open-ended questions for a couple to ask each other. 
-  
-  The goal is to spark entertaining conversation, not deep relationship analysis.
-  Please include a diverse mix of topics such as:
-  - Imaginative scenarios (e.g., "If we were characters in a video game...", "If you could instantly learn any skill...")
-  - Just-for-fun hypotheticals (e.g., "How would we survive a zombie apocalypse?", "If animals could talk, which would be the rudest?")
-  - Playful "Would you rather" style questions
-  - Random questions about life, the universe, and personal quirks.
+  const data = await response.json();
+  const questions: string[] = data.questions;
 
-  Avoid strictly relationship-focused questions (like "What is your favorite memory of us?").
-  Avoid negative or heavy topics. 
-  Return the result as a simple JSON array of strings.`;
-
-  if (previouslyAsked.length > 0) {
-    prompt += `\n\nIMPORTANT: The following questions have already been asked. DO NOT generate any of these or anything very similar to them:\n${JSON.stringify(previouslyAsked)}`;
-  }
-
+  // Cache questions for offline use
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.STRING,
-          },
-        },
-        // We want creative questions
-        temperature: 0.9, 
-      },
-    });
+    const existing = JSON.parse(localStorage.getItem(CACHE_KEY) || '[]') as string[];
+    const updated = [...new Set([...existing, ...questions])].slice(-MAX_CACHE);
+    localStorage.setItem(CACHE_KEY, JSON.stringify(updated));
+  } catch {
+    // localStorage unavailable
+  }
 
-    const rawText = response.text;
-    if (!rawText) {
-      throw new Error("No content generated from Gemini.");
-    }
+  return questions;
+};
 
-    // The responseSchema ensures we get a JSON array directly
-    const questions: string[] = JSON.parse(rawText);
-    
-    return questions;
-
-  } catch (error) {
-    console.error("Error generating questions:", error);
-    throw error;
+/**
+ * Returns cached questions for offline fallback.
+ */
+export const getCachedQuestions = (count: number, exclude: string[]): string[] => {
+  try {
+    const cached = JSON.parse(localStorage.getItem(CACHE_KEY) || '[]') as string[];
+    const available = cached.filter(q => !exclude.includes(q));
+    // Shuffle and take requested count
+    const shuffled = available.sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, count);
+  } catch {
+    return [];
   }
 };
