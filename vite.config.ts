@@ -19,8 +19,8 @@ export default defineConfig({
         name: 'Q&A Together',
         short_name: 'Q&A',
         description: 'AI-powered conversation starter questions for couples',
-        theme_color: '#f43f5e',
-        background_color: '#fff1f2',
+        theme_color: '#d97706',
+        background_color: '#fffbeb',
         display: 'standalone',
         orientation: 'portrait',
         icons: [

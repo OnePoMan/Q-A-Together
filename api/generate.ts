@@ -7,6 +7,26 @@ const FALLBACK_MODEL = 'gemini-3.1-flash-lite-preview';
 const apiKey = process.env.GEMINI_API_KEY || '';
 const ai = new GoogleGenAI({ apiKey });
 
+const MOOD_INSTRUCTIONS: Record<string, string> = {
+  silly: 'Make the questions extra silly, absurd, and laugh-out-loud funny. Lean into ridiculous scenarios and playful humor.',
+  deep: 'Make the questions thought-provoking and philosophically rich. Favor questions that spark meaningful reflection and deep conversation.',
+  romantic: 'Make the questions warm, intimate, and relationship-focused. Include questions about dreams together, memories, and what you love about each other.',
+  random: '',
+};
+
+const TOPIC_TO_CATEGORY: Record<string, string> = {
+  'Hypotheticals': '- Absurd hypotheticals played straight (e.g., "Every bird on Earth now works for you. What\'s your first order of business?")',
+  'Would You Rather': '- Unexpected \'would you rather\' scenarios (e.g., "Would you rather have your life narrated by Morgan Freeman 24/7 or have a permanent laugh track?")',
+  'Philosophy': '- Thought experiments & philosophy-lite (e.g., "If you could know the absolute truth to one question about the universe, but could never share the answer, what would you ask?")\n- Creative dilemmas with no right answer (e.g., "You can either have a pause button or a rewind button for your life, but only one -- which?")',
+  'Food & Travel': '- Food, travel & sensory experiences (e.g., "If you could teleport to any restaurant in the world right now, where are we going?")',
+  'Superpowers': '- Superpowers & sci-fi premises (e.g., "You wake up and can fluently speak to one species of animal. Which do you choose?")',
+  'Strategy': '- Strategy & survival (e.g., "You have 24 hours to hide a giraffe from the FBI. What\'s your plan?")',
+  'Self-Knowledge': '- Self-knowledge & quirks (e.g., "What\'s something you\'re embarrassingly competitive about?")\n- Taste, culture & guilty pleasures (e.g., "What\'s a hill you\'d die on that literally nobody else cares about?")',
+  'Pop Culture': '- Time, memory & alternate lives (e.g., "If you could spend a year in any past decade with no modern tech -- which decade and where?")',
+  'Collaborative': '- Collaborative imagination (e.g., "If we had to open a business together by next month with a $500 budget, what are we launching?")',
+  'Rapid-Fire': '- Rapid-fire judgment calls (e.g., "Rank these by how much you\'d panic: lost wallet, dead phone, spider on shoulder, surprise public speaking")',
+};
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -17,31 +37,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { previouslyAsked = [] } = req.body || {};
+    const { previouslyAsked = [], mood = 'random', topics = [] } = req.body || {};
 
     // Cap to last 100 to stay within token limits
     const recentHistory = Array.isArray(previouslyAsked)
       ? previouslyAsked.slice(-100)
       : [];
 
+    // Build category list from selected topics (or all if none specified)
+    const selectedTopics = Array.isArray(topics) && topics.length > 0
+      ? topics
+      : Object.keys(TOPIC_TO_CATEGORY);
+    const categories = selectedTopics
+      .map((t: string) => TOPIC_TO_CATEGORY[t])
+      .filter(Boolean)
+      .join('\n');
+
+    const moodInstruction = MOOD_INSTRUCTIONS[mood] || '';
+
     let prompt = `Generate 20 creative, intellectually stimulating, and entertaining questions for a couple to ask each other.
 
 Each question should be surprising, specific, and spark genuine debate or storytelling -- not something easily answered in one word. Aim for questions that make people pause, laugh, or say "oh, that's a good one."
+${moodInstruction ? `\nTONE: ${moodInstruction}\n` : ''}
+Draw from these categories, spreading questions evenly across them:
 
-Draw from a WIDE variety of categories. Each batch should include questions from at least 8 of these categories, and no more than 3 from any single one:
-
-- Thought experiments & philosophy-lite (e.g., "If you could know the absolute truth to one question about the universe, but you could never share the answer, what would you ask?")
-- Creative dilemmas with no right answer (e.g., "You can either have a pause button for your own life or a rewind button, but only one -- which do you pick and why?")
-- Absurd hypotheticals played straight (e.g., "Every bird on Earth now works for you. What's your first order of business?")
-- Unexpected 'would you rather' scenarios (e.g., "Would you rather have your life narrated out loud by Morgan Freeman 24/7 or have a permanent laugh track that plays whenever something happens to you?")
-- Taste, culture & guilty pleasures (e.g., "What's a hill you'd die on that literally nobody else cares about?")
-- Time, memory & alternate lives (e.g., "If you could spend a year living in any decade of the past -- but you'd have no modern technology -- which decade and where?")
-- Superpowers & sci-fi premises (e.g., "You wake up and discover you can fluently speak to one species of animal. Which do you choose and what do you do first?")
-- Strategy & survival (e.g., "You have 24 hours to hide a giraffe from the FBI. What's your plan?")
-- Self-knowledge & quirks (e.g., "What's something you're embarrassingly competitive about?")
-- Food, travel & sensory experiences (e.g., "If you could teleport to any restaurant in the world right now, where are we going and what are we ordering?")
-- Collaborative imagination (e.g., "If we had to open a business together by next month with a $500 budget, what are we launching?")
-- Rapid-fire judgment calls (e.g., "Rank these in order of how much you'd panic: lost wallet, dead phone, spider on your shoulder, surprise public speaking")
+${categories}
 
 QUALITY GUIDELINES:
 - Favor specificity over vagueness. "What's a weird food combo you secretly love?" beats "What's your favorite food?"

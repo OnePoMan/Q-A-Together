@@ -12,8 +12,8 @@ export const Button: React.FC<ButtonProps> = ({
   const baseStyles = "inline-flex items-center justify-center rounded-full px-8 py-3 font-semibold transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 shadow-lg hover:shadow-xl";
 
   const variants = {
-    primary: "bg-rose-500 text-white hover:bg-rose-600 focus:ring-rose-500",
-    secondary: "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 focus:ring-slate-200 dark:focus:ring-slate-600",
+    primary: "bg-gradient-to-r from-amber-500 to-amber-600 text-white hover:from-amber-600 hover:to-amber-700 focus:ring-amber-400 shadow-amber-200/50 dark:shadow-amber-900/30",
+    secondary: "bg-white dark:bg-stone-800 text-stone-700 dark:text-stone-200 border border-amber-200 dark:border-stone-600 hover:bg-amber-50 dark:hover:bg-stone-700 focus:ring-amber-200 dark:focus:ring-stone-600",
   };
 
   return (

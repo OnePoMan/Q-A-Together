@@ -1,14 +1,20 @@
+import type { Mood, Topic } from '../types';
+
 const CACHE_KEY = 'qa-cached-questions';
 const MAX_CACHE = 200;
 
 /**
  * Generates questions via the serverless API proxy.
  */
-export const generateQuestions = async (previouslyAsked: string[] = []): Promise<string[]> => {
+export const generateQuestions = async (
+  previouslyAsked: string[] = [],
+  mood: Mood = 'random',
+  topics: Topic[] = [],
+): Promise<string[]> => {
   const response = await fetch('/api/generate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ previouslyAsked }),
+    body: JSON.stringify({ previouslyAsked, mood, topics }),
   });
 
   if (!response.ok) {

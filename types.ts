@@ -18,3 +18,34 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   isLoading?: boolean;
   variant?: 'primary' | 'secondary';
 }
+
+export type Mood = 'random' | 'silly' | 'deep' | 'romantic';
+
+export interface GenerateOptions {
+  mood: Mood;
+  topics: string[];
+}
+
+export const ALL_TOPICS = [
+  'Hypotheticals',
+  'Would You Rather',
+  'Philosophy',
+  'Food & Travel',
+  'Superpowers',
+  'Strategy',
+  'Self-Knowledge',
+  'Pop Culture',
+  'Collaborative',
+  'Rapid-Fire',
+] as const;
+
+export type Topic = (typeof ALL_TOPICS)[number];
+
+export interface RoomState {
+  code: string;
+  questions: string[];
+  currentIndex: number;
+  mood: string;
+  topics: string[];
+  createdAt: number;
+}
