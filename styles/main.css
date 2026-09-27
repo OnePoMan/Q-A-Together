@@ -4,6 +4,8 @@
 @import "@fontsource-variable/playfair-display/wght-italic.css";
 
 @custom-variant dark (&:where(.dark, .dark *));
+/* Phone layout, chosen by hooks/useDisplayMode.ts (Auto / Phone / Desktop). */
+@custom-variant phone (&:where([data-display=phone], [data-display=phone] *));
 
 @theme {
   --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;

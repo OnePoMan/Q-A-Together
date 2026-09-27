@@ -14,6 +14,7 @@ Conversation-starter questions for couples. Pick a vibe and get 20 fresh questio
 - **Memories:** jot down each other's answers on any card; the Memories page keeps them as a timeline (on-device only)
 - **Share as image:** any question can be shared as a 4:5 card image, or as plain text
 - **Stays awake:** the screen won't dim while a deck is open (Screen Wake Lock, where supported)
+- **Phone layout:** on phones the play screen is exactly one screen tall: the card stretches to fill it and the controls sit at the bottom. The home screen switches to compact vibe rows. Desktop keeps the classic layout. **Settings → Layout** switches between Auto (the default), Phone and Desktop. Sideways phones scroll normally.
 - **Card motion:** decks deal onto the table, cards flip in, tilt as you drag and fly off when swiped (all disabled with reduced motion)
 - **Friendly rate limiting:** if the firewall limit is hit, the app deals saved questions and shows a live countdown until fresh ones are available
 - **Works offline:** installable PWA with a built-in starter deck plus a cache of previously generated questions

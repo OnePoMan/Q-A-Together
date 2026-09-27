@@ -1,7 +1,8 @@
 import React, { useEffect, useRef } from 'react';
 import { DEFAULT_NAMES } from '../shared/brand';
-import { Download, Lock, Monitor, Moon, RotateCcw, Sun, Trash, X } from 'lucide-react';
+import { Download, Lock, Monitor, MonitorSmartphone, Moon, RotateCcw, Smartphone, Sun, Trash, X } from 'lucide-react';
 import type { ThemePreference } from '../hooks/useTheme';
+import type { DisplayPreference } from '../hooks/useDisplayMode';
 
 interface SettingsDialogProps {
   open: boolean;
@@ -10,6 +11,8 @@ interface SettingsDialogProps {
   onNamesChange: (names: [string, string]) => void;
   theme: ThemePreference;
   onThemeChange: (theme: ThemePreference) => void;
+  display: DisplayPreference;
+  onDisplayChange: (display: DisplayPreference) => void;
   historyCount: number;
   savedCount: number;
   onResetHistory: () => void;
@@ -25,6 +28,46 @@ const THEMES: { id: ThemePreference; label: string; icon: typeof Sun }[] = [
   { id: 'dark', label: 'Dark', icon: Moon },
 ];
 
+const DISPLAYS: { id: DisplayPreference; label: string; icon: typeof Sun }[] = [
+  { id: 'auto', label: 'Auto', icon: MonitorSmartphone },
+  { id: 'phone', label: 'Phone', icon: Smartphone },
+  { id: 'desktop', label: 'Desktop', icon: Monitor },
+];
+
+function Segmented<T extends string>({
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  label: string;
+  options: { id: T; label: string; icon: typeof Sun }[];
+  value: T;
+  onChange: (value: T) => void;
+}) {
+  return (
+    <div role="radiogroup" aria-label={label} className="grid grid-cols-3 gap-1 rounded-2xl bg-slate-100 dark:bg-slate-800 p-1">
+      {options.map(({ id, label: optionLabel, icon: Icon }) => (
+        <button
+          key={id}
+          type="button"
+          role="radio"
+          aria-checked={value === id}
+          onClick={() => onChange(id)}
+          className={`inline-flex items-center justify-center gap-1.5 rounded-xl py-2 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 ${
+            value === id
+              ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-white'
+              : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+          }`}
+        >
+          <Icon className="h-4 w-4" aria-hidden />
+          {optionLabel}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 const inputClass =
   'w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3.5 py-2.5 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-rose-500';
 
@@ -35,6 +78,8 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({
   onNamesChange,
   theme,
   onThemeChange,
+  display,
+  onDisplayChange,
   historyCount,
   savedCount,
   onResetHistory,
@@ -103,25 +148,12 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({
 
         <fieldset className="mb-6">
           <legend className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-300">Appearance</legend>
-          <div role="radiogroup" aria-label="Theme" className="grid grid-cols-3 gap-1 rounded-2xl bg-slate-100 dark:bg-slate-800 p-1">
-            {THEMES.map(({ id, label, icon: Icon }) => (
-              <button
-                key={id}
-                type="button"
-                role="radio"
-                aria-checked={theme === id}
-                onClick={() => onThemeChange(id)}
-                className={`inline-flex items-center justify-center gap-1.5 rounded-xl py-2 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 ${
-                  theme === id
-                    ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-white'
-                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
-                }`}
-              >
-                <Icon className="h-4 w-4" aria-hidden />
-                {label}
-              </button>
-            ))}
-          </div>
+          <Segmented label="Theme" options={THEMES} value={theme} onChange={onThemeChange} />
+          <p className="mb-2 mt-4 text-sm font-semibold text-slate-700 dark:text-slate-300">Layout</p>
+          <Segmented label="Layout" options={DISPLAYS} value={display} onChange={onDisplayChange} />
+          <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+            Auto uses the phone layout on phones and the desktop layout on bigger screens.
+          </p>
         </fieldset>
 
         <div className="space-y-2">

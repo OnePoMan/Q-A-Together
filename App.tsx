@@ -23,6 +23,7 @@ import { useLocalStorage } from './hooks/useLocalStorage';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { useRoom, type RoomDeck } from './hooks/useRoom';
 import { useTheme } from './hooks/useTheme';
+import { useDisplayMode } from './hooks/useDisplayMode';
 import { useWakeLock } from './hooks/useWakeLock';
 import { MAX_JOURNAL_ENTRIES, hasAnswers, type Journal } from './lib/journal';
 import { APP_NAME, APP_URL } from './shared/brand';
@@ -92,6 +93,7 @@ const App: React.FC = () => {
 
   const isOnline = useOnlineStatus();
   const { preference: theme, setPreference: setTheme } = useTheme();
+  const { preference: display, setPreference: setDisplay, isPhone, isPortrait } = useDisplayMode();
   const install = useInstallPrompt();
 
   const savedKeys = useMemo(() => new Set(saved.map(q => normalizeQuestion(q.text))), [saved]);
@@ -267,6 +269,11 @@ const App: React.FC = () => {
 
   useWakeLock(view === 'play' && !!validDeck);
 
+  // Phone layout for the card view: the page becomes exactly one screen tall,
+  // the card stretches to fill it and the controls sit at the bottom. Sideways
+  // phones are too short for that, so they scroll like the classic layout.
+  const immersive = isPhone && isPortrait && view === 'play' && layout === 'card';
+
   // Confirm a data move from the old address (see lib/transfer.ts).
   useEffect(() => {
     try {
@@ -282,7 +289,7 @@ const App: React.FC = () => {
   const deckAnsweredCount = validDeck ? validDeck.questions.filter(q => answered[q.text]).length : 0;
 
   return (
-    <div className="min-h-dvh flex flex-col bg-radial-[ellipse_at_top] from-rose-100/70 via-rose-50/40 to-slate-50 dark:from-rose-950/30 dark:via-slate-950 dark:to-slate-950 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+    <div className={`${immersive ? 'h-dvh overflow-hidden' : 'min-h-dvh'} flex flex-col bg-radial-[ellipse_at_top] from-rose-100/70 via-rose-50/40 to-slate-50 dark:from-rose-950/30 dark:via-slate-950 dark:to-slate-950 text-slate-900 dark:text-slate-100 transition-colors duration-300`}>
       <a
         href="#main"
         className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[70] focus:rounded-full focus:bg-white focus:px-4 focus:py-2 focus:shadow-lg dark:focus:bg-slate-800"
@@ -291,18 +298,18 @@ const App: React.FC = () => {
       </a>
 
       <header className="sticky top-0 z-50 border-b border-rose-100/60 dark:border-slate-800/80 bg-white/75 dark:bg-slate-950/75 backdrop-blur-lg pt-[env(safe-area-inset-top)]">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
+        <div className="mx-auto flex h-16 phone:h-14 max-w-6xl items-center justify-between px-4 sm:px-6">
           <button
             type="button"
             onClick={() => setView('home')}
             className="flex items-center gap-2 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
           >
-            <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-rose-500 text-white shadow-md shadow-rose-500/30">
+            <span className="inline-flex h-8 w-8 phone:h-7 phone:w-7 items-center justify-center rounded-xl bg-rose-500 text-white shadow-md shadow-rose-500/30">
               <Heart className="h-4 w-4 fill-white" aria-hidden />
             </span>
             <span className="flex flex-col text-left leading-none">
               <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-rose-500">Q&amp;A with</span>
-              <span className="font-serif text-lg sm:text-xl font-semibold">Ethan &amp; Brianna</span>
+              <span className="whitespace-nowrap font-serif text-lg sm:text-xl phone:text-base max-[360px]:text-sm font-semibold">Ethan &amp; Brianna</span>
             </span>
           </button>
 
@@ -368,18 +375,23 @@ const App: React.FC = () => {
       <MoveBanner />
       {!isOnline && <OfflineBanner />}
 
-      <main id="main" className="mx-auto w-full max-w-6xl flex-grow px-4 sm:px-6 pt-8 sm:pt-12 pb-[calc(3rem+env(safe-area-inset-bottom))]">
+      <main
+        id="main"
+        className={`mx-auto w-full max-w-6xl phone:max-w-lg flex-grow px-4 sm:px-6 phone:px-4 pt-8 sm:pt-12 phone:pt-4 ${
+          immersive ? 'flex min-h-0 flex-col pb-[calc(0.75rem+env(safe-area-inset-bottom))]' : 'pb-[calc(3rem+env(safe-area-inset-bottom))]'
+        }`}
+      >
         {view === 'home' && (
           <div className="mx-auto max-w-2xl">
-            <div className="mb-8 text-center animate-fade-in-up">
-              <span className="mb-5 inline-flex items-center gap-1.5 rounded-full bg-rose-100/80 dark:bg-rose-500/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-rose-700 dark:text-rose-300">
+            <div className="mb-8 phone:mb-5 text-center animate-fade-in-up">
+              <span className="mb-5 phone:hidden inline-flex items-center gap-1.5 rounded-full bg-rose-100/80 dark:bg-rose-500/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-rose-700 dark:text-rose-300">
                 <Sparkles className="h-3.5 w-3.5" aria-hidden />
                 Conversation starters for two
               </span>
-              <h1 className="font-serif text-4xl sm:text-5xl md:text-6xl font-semibold leading-[1.1] text-balance">
+              <h1 className="font-serif text-4xl sm:text-5xl md:text-6xl phone:text-[1.8rem] font-semibold leading-[1.1] text-balance">
                 Ask better questions, <em className="text-rose-500">together.</em>
               </h1>
-              <p className="mx-auto mt-5 max-w-lg text-base sm:text-lg leading-relaxed text-slate-600 dark:text-slate-400">
+              <p className="mx-auto mt-5 phone:mt-2 max-w-lg text-base sm:text-lg phone:text-sm leading-relaxed text-slate-600 dark:text-slate-400">
                 Pick a vibe and get 20 fresh questions for date nights, walks and long drives. No repeats.
               </p>
             </div>
@@ -388,7 +400,7 @@ const App: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setView('play')}
-                className="mb-6 flex w-full items-center gap-4 rounded-2xl border border-slate-200/80 dark:border-slate-700/60 bg-white/80 dark:bg-slate-800/60 p-4 text-left shadow-sm transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 animate-fade-in-up"
+                className="mb-6 phone:mb-4 flex w-full items-center gap-4 phone:gap-3 phone:p-3 rounded-2xl border border-slate-200/80 dark:border-slate-700/60 bg-white/80 dark:bg-slate-800/60 p-4 text-left shadow-sm transition hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 animate-fade-in-up"
               >
                 <span className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${VIBE_STYLES[deckInProgress.vibe].tile}`}>
                   <Play className="h-5 w-5" aria-hidden />
@@ -403,8 +415,8 @@ const App: React.FC = () => {
               </button>
             )}
 
-            <h2 className="mb-3 font-sans text-sm font-semibold text-slate-700 dark:text-slate-300">Choose a vibe</h2>
-            <VibePicker value={vibe} onChange={chooseVibe} adultUnlocked={adultOk} />
+            <h2 className="mb-3 phone:mb-2 font-sans text-sm font-semibold text-slate-700 dark:text-slate-300">Choose a vibe</h2>
+            <VibePicker value={vibe} onChange={chooseVibe} adultUnlocked={adultOk} compact={isPhone} />
 
             {error && (
               <div role="alert" className="mt-6 rounded-2xl border border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-500/10 p-4 text-sm text-red-700 dark:text-red-300">
@@ -418,7 +430,13 @@ const App: React.FC = () => {
               </div>
             )}
 
-            <div className="sticky bottom-0 z-10 -mx-4 mt-6 bg-linear-to-t from-slate-50 via-slate-50/90 to-transparent px-4 pt-6 pb-[calc(1rem+env(safe-area-inset-bottom))] dark:from-slate-950 dark:via-slate-950/90 sm:static sm:mx-0 sm:bg-none sm:p-0 sm:pt-2">
+            <div
+              className={
+                isPhone
+                  ? 'sticky bottom-0 z-10 -mx-4 mt-3 bg-linear-to-t from-slate-50 via-slate-50/90 to-transparent px-4 pt-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] dark:from-slate-950 dark:via-slate-950/90'
+                  : 'sticky bottom-0 z-10 -mx-4 mt-6 bg-linear-to-t from-slate-50 via-slate-50/90 to-transparent px-4 pt-6 pb-[calc(1rem+env(safe-area-inset-bottom))] dark:from-slate-950 dark:via-slate-950/90 sm:static sm:mx-0 sm:bg-none sm:p-0 sm:pt-2'
+              }
+            >
               <Button size="lg" onClick={() => deal()} isLoading={isLoading} className="w-full">
                 {!isLoading && <Sparkles className="h-5 w-5" aria-hidden />}
                 Deal 20 {getVibe(vibe).label} questions
@@ -437,11 +455,14 @@ const App: React.FC = () => {
         )}
 
         {view === 'play' && (
-          <div>
-            <div className="mx-auto mb-6 flex max-w-xl items-center justify-between gap-2">
-              <Button variant="ghost" onClick={() => setView('home')} className="px-3! -ml-3">
+          <div className={immersive ? 'flex min-h-0 flex-1 flex-col' : ''}>
+            <div className="mx-auto mb-6 phone:mb-3 flex w-full max-w-xl items-center justify-between gap-2">
+              <Button variant="ghost" onClick={() => setView('home')} className="px-3! -ml-3" aria-label="Back to vibes">
                 <ArrowLeft className="h-4 w-4" aria-hidden />
-                Vibes
+                <span className="phone:hidden">Vibes</span>
+                {validDeck && (
+                  <span className="hidden phone:inline max-w-[8rem] truncate">{validDeck.label ?? getVibe(validDeck.vibe).label}</span>
+                )}
               </Button>
               <div className="flex items-center gap-1">
                 <div role="radiogroup" aria-label="Layout" className="flex rounded-full bg-slate-100 dark:bg-slate-800 p-1">
@@ -495,7 +516,7 @@ const App: React.FC = () => {
 
             {isLoading || !validDeck ? (
               isLoading ? (
-                <LoadingDeck />
+                <LoadingDeck fill={immersive} />
               ) : (
                 <div className="text-center">
                   <Button size="lg" onClick={() => deal()}>
@@ -523,6 +544,7 @@ const App: React.FC = () => {
                 onEditNames={() => setSettingsOpen(true)}
                 onOpenJournal={setJournalTarget}
                 hasJournal={hasJournal}
+                fill={immersive}
               />
             ) : (
               <>
@@ -611,7 +633,7 @@ const App: React.FC = () => {
         )}
       </main>
 
-      <footer className="border-t border-slate-200/60 dark:border-slate-800/80 py-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] text-center text-xs text-slate-400 dark:text-slate-500">
+      <footer className="phone:hidden border-t border-slate-200/60 dark:border-slate-800/80 py-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] text-center text-xs text-slate-400 dark:text-slate-500">
         Made for Ethan &amp; Brianna · Questions by Google Gemini
       </footer>
 
@@ -622,6 +644,8 @@ const App: React.FC = () => {
         onNamesChange={setNames}
         theme={theme}
         onThemeChange={setTheme}
+        display={display}
+        onDisplayChange={setDisplay}
         historyCount={history.length}
         savedCount={saved.length}
         onResetHistory={() => {

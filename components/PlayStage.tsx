@@ -25,6 +25,8 @@ interface PlayStageProps {
   onEditNames: () => void;
   onOpenJournal: (q: Question) => void;
   hasJournal: (q: Question) => boolean;
+  /** Phone layout: stretch to fill the remaining screen height. */
+  fill?: boolean;
 }
 
 const SWIPE_THRESHOLD = 80;
@@ -56,6 +58,7 @@ export const PlayStage: React.FC<PlayStageProps> = ({
   onEditNames,
   onOpenJournal,
   hasJournal,
+  fill = false,
 }) => {
   const [direction, setDirection] = useState<'next' | 'prev'>('next');
   const [dragX, setDragX] = useState(0);
@@ -169,9 +172,9 @@ export const PlayStage: React.FC<PlayStageProps> = ({
   const progress = Math.min(index + 1, total) / Math.max(total, 1);
 
   return (
-    <section aria-label="Question deck" className="mx-auto w-full max-w-xl">
+    <section aria-label="Question deck" className={`mx-auto w-full max-w-xl ${fill ? 'flex min-h-0 flex-1 flex-col' : ''}`}>
       {/* Progress */}
-      <div className="mb-5 flex items-center gap-3">
+      <div className={`flex items-center gap-3 ${fill ? 'mb-3' : 'mb-5'}`}>
         <div
           className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-200/80 dark:bg-slate-800"
           role="progressbar"
@@ -191,7 +194,7 @@ export const PlayStage: React.FC<PlayStageProps> = ({
       </div>
 
       {/* Card stack */}
-      <div className="relative">
+      <div className={`relative ${fill ? 'min-h-0 flex-1' : ''}`}>
         <div
           aria-hidden
           className={`absolute inset-x-6 -bottom-3 top-3 rounded-[2rem] bg-white/50 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-700/40 rotate-[1.5deg] ${dealing ? 'animate-deal-in [animation-delay:120ms]' : ''}`}
@@ -208,7 +211,7 @@ export const PlayStage: React.FC<PlayStageProps> = ({
             onPointerMove={onPointerMove}
             onPointerUp={endDrag}
             onPointerCancel={endDrag}
-            className={`relative flex min-h-[22rem] sm:min-h-[24rem] flex-col rounded-[2rem] border border-white/80 dark:border-slate-700/60 bg-gradient-to-br ${style.card} p-7 sm:p-9 shadow-xl shadow-slate-900/5 dark:shadow-black/30 touch-pan-y select-none will-change-transform ${
+            className={`relative flex ${fill ? 'h-full min-h-[16rem]' : 'min-h-[22rem] sm:min-h-[24rem]'} flex-col rounded-[2rem] border border-white/80 dark:border-slate-700/60 bg-gradient-to-br ${style.card} ${fill ? 'p-6' : 'p-7 sm:p-9'} shadow-xl shadow-slate-900/5 dark:shadow-black/30 touch-pan-y select-none will-change-transform ${
               dealing && index === 0 ? 'animate-deal-in' : direction === 'next' ? 'animate-card-in-right' : 'animate-card-in-left'
             } ${dragging ? 'cursor-grabbing shadow-2xl' : 'cursor-grab'}`}
             style={{
@@ -277,7 +280,11 @@ export const PlayStage: React.FC<PlayStageProps> = ({
               </div>
             </div>
 
-            <p className="my-auto py-8 font-serif text-[1.65rem] leading-snug sm:text-[2rem] text-slate-900 dark:text-slate-50 text-balance">
+            <p
+              className={`my-auto font-serif leading-snug text-slate-900 dark:text-slate-50 text-balance ${
+                fill ? 'py-4 text-[clamp(1.5rem,min(8vw,4.6dvh),2.6rem)]' : 'py-8 text-[1.65rem] sm:text-[2rem]'
+              }`}
+            >
               {current.text}
             </p>
 
@@ -292,7 +299,7 @@ export const PlayStage: React.FC<PlayStageProps> = ({
         ) : (
           <article
             key="end"
-            className="relative flex min-h-[22rem] sm:min-h-[24rem] flex-col items-center justify-center rounded-[2rem] border border-white/80 dark:border-slate-700/60 bg-gradient-to-br from-rose-50 via-white to-amber-50 dark:from-rose-950/40 dark:via-slate-900 dark:to-slate-900 p-8 text-center shadow-xl animate-card-in-right"
+            className={`relative flex ${fill ? 'h-full min-h-[16rem]' : 'min-h-[22rem] sm:min-h-[24rem]'} flex-col items-center justify-center rounded-[2rem] border border-white/80 dark:border-slate-700/60 bg-gradient-to-br from-rose-50 via-white to-amber-50 dark:from-rose-950/40 dark:via-slate-900 dark:to-slate-900 p-8 text-center shadow-xl animate-card-in-right`}
           >
             <span className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-100 text-rose-600 dark:bg-rose-500/15 dark:text-rose-300">
               <Layers className="h-7 w-7" aria-hidden />
@@ -315,25 +322,25 @@ export const PlayStage: React.FC<PlayStageProps> = ({
       </div>
 
       {/* Controls */}
-      <div className="mt-8 flex items-center justify-between gap-3">
+      <div className={`flex items-center justify-between gap-3 max-[360px]:gap-1 ${fill ? 'mt-4' : 'mt-8'}`}>
         <button
           type="button"
           onClick={goPrev}
           disabled={index === 0}
           aria-label="Previous question"
-          className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 shadow-sm transition hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
+          className="inline-flex h-12 w-12 max-[360px]:h-10 max-[360px]:w-10 shrink-0 items-center justify-center rounded-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 shadow-sm transition hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
         >
           <ChevronLeft className="h-5 w-5" aria-hidden />
         </button>
 
         {current && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 max-[360px]:gap-0.5">
             <button
               type="button"
               onClick={() => toggleSaved(current)}
               aria-pressed={isSaved(current)}
               aria-label={isSaved(current) ? 'Remove from saved' : 'Save question'}
-              className="inline-flex h-12 w-12 items-center justify-center rounded-full transition hover:bg-rose-50 dark:hover:bg-rose-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
+              className="inline-flex h-12 w-12 max-[360px]:h-10 max-[360px]:w-10 shrink-0 items-center justify-center rounded-full transition hover:bg-rose-50 dark:hover:bg-rose-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
             >
               <Heart
                 className={`h-6 w-6 transition-all ${isSaved(current) ? 'fill-rose-500 text-rose-500 animate-heart-bounce' : 'text-slate-400 dark:text-slate-500'}`}
@@ -345,7 +352,7 @@ export const PlayStage: React.FC<PlayStageProps> = ({
               onClick={skipDisliked}
               aria-label="Not for us: skip and show fewer like this"
               title="Not for us"
-              className="inline-flex h-12 w-12 items-center justify-center rounded-full text-slate-400 dark:text-slate-500 transition hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-600 dark:hover:text-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
+              className="inline-flex h-12 w-12 max-[360px]:h-10 max-[360px]:w-10 shrink-0 items-center justify-center rounded-full text-slate-400 dark:text-slate-500 transition hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-600 dark:hover:text-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
             >
               <ThumbsDown className="h-5 w-5" aria-hidden />
             </button>
@@ -353,7 +360,7 @@ export const PlayStage: React.FC<PlayStageProps> = ({
               type="button"
               onClick={() => onShare(current)}
               aria-label="Share question"
-              className="inline-flex h-12 w-12 items-center justify-center rounded-full text-slate-400 dark:text-slate-500 transition hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-600 dark:hover:text-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
+              className="inline-flex h-12 w-12 max-[360px]:h-10 max-[360px]:w-10 shrink-0 items-center justify-center rounded-full text-slate-400 dark:text-slate-500 transition hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-600 dark:hover:text-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
             >
               <Share2 className="h-5 w-5" aria-hidden />
             </button>
@@ -363,17 +370,23 @@ export const PlayStage: React.FC<PlayStageProps> = ({
         {atEnd ? (
           <span className="h-12 w-12" aria-hidden />
         ) : (
-          <Button onClick={goNext} size="lg" className="px-6!" aria-label="Next question">
+          <Button onClick={goNext} size="lg" className="shrink-0 px-6! max-[360px]:px-4!" aria-label="Next question">
             Next
             <ChevronRight className="h-5 w-5 -mr-1" aria-hidden />
           </Button>
         )}
       </div>
 
-      <p className="mt-6 text-center text-xs text-slate-400 dark:text-slate-500 hidden sm:block">
-        Tip: use ← → to move and S to save. Hearts and thumbs-downs shape future decks.
-      </p>
-      <p className="mt-6 text-center text-xs text-slate-400 dark:text-slate-500 sm:hidden">Swipe the card to move. Hearts and thumbs-downs shape future decks.</p>
+      {!fill && (
+        <>
+          <p className="mt-6 text-center text-xs text-slate-400 dark:text-slate-500 hidden sm:block">
+            Tip: use ← → to move and S to save. Hearts and thumbs-downs shape future decks.
+          </p>
+          <p className="mt-6 text-center text-xs text-slate-400 dark:text-slate-500 sm:hidden">
+            Swipe the card to move. Hearts and thumbs-downs shape future decks.
+          </p>
+        </>
+      )}
     </section>
   );
 };
