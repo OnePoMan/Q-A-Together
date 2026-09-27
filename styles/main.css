@@ -1,14 +1,29 @@
 @import "tailwindcss";
+@import "@fontsource-variable/inter/wght.css";
+@import "@fontsource-variable/playfair-display/wght.css";
+@import "@fontsource-variable/playfair-display/wght-italic.css";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --font-sans: 'Inter', sans-serif;
-  --font-serif: 'Playfair Display', serif;
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-serif: 'Playfair Display Variable', ui-serif, Georgia, serif;
+}
+
+html {
+  -webkit-tap-highlight-color: transparent;
+  color-scheme: light;
+}
+html.dark {
+  color-scheme: dark;
 }
 
 body {
   font-family: var(--font-sans);
+  background-color: var(--color-slate-50);
+}
+html.dark body {
+  background-color: var(--color-slate-950);
 }
 
 h1, h2, h3, .font-serif {
@@ -16,26 +31,57 @@ h1, h2, h3, .font-serif {
 }
 
 @keyframes fade-in-up {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
+/* No fill-mode: once finished, inline drag transforms must take over. */
+@keyframes card-in-right {
+  from { opacity: 0; transform: translateX(40px) rotate(2deg); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes card-in-left {
+  from { opacity: 0; transform: translateX(-40px) rotate(-2deg); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes deal {
+  0%, 100% { transform: translateY(0) rotate(0); }
+  50% { transform: translateY(-6px) rotate(-0.6deg); }
+}
+@keyframes indeterminate {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(300%); }
+}
 @keyframes heart-bounce {
   0% { transform: scale(1); }
-  50% { transform: scale(1.4); }
-  100% { transform: scale(1.1); }
+  50% { transform: scale(1.35); }
+  100% { transform: scale(1); }
 }
 
 @utility animate-fade-in-up {
-  animation: fade-in-up 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: fade-in-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+@utility animate-card-in-right {
+  animation: card-in-right 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@utility animate-card-in-left {
+  animation: card-in-left 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@utility animate-deal {
+  animation: deal 1.6s ease-in-out infinite;
+}
+@utility animate-indeterminate {
+  animation: indeterminate 1.4s ease-in-out infinite;
+}
+@utility animate-heart-bounce {
+  animation: heart-bounce 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
-@utility animate-heart-bounce {
-  animation: heart-bounce 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
 }

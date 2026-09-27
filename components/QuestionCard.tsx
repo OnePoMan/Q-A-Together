@@ -1,89 +1,87 @@
 import React from 'react';
-import { QuestionCardProps } from '../types';
-import { Quote, CheckCircle2, Heart, Share2 } from 'lucide-react';
-import { tapLight, tapDouble } from '../utils/haptics';
+import { CircleCheck, Heart, Share2 } from 'lucide-react';
+import type { Question } from '../shared/vibes';
+import { tapDouble, tapLight } from '../utils/haptics';
+
+interface QuestionCardProps {
+  question: Question;
+  index: number;
+  isSaved: boolean;
+  isAnswered: boolean;
+  onToggleSaved: () => void;
+  onToggleAnswered: () => void;
+  onShare: () => void;
+}
 
 export const QuestionCard: React.FC<QuestionCardProps> = ({
-  text,
+  question,
   index,
-  isFavorite,
+  isSaved,
   isAnswered,
-  onToggleFavorite,
+  onToggleSaved,
   onToggleAnswered,
   onShare,
-}) => {
-  const animationDelay = `${index * 100}ms`;
-
-  const handleFavoriteClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    tapDouble();
-    onToggleFavorite();
-  };
-
-  const handleShareClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    onShare();
-  };
-
-  const handleCardClick = () => {
-    tapLight();
-    onToggleAnswered();
-  };
-
-  return (
-    <div
-      onClick={handleCardClick}
-      className={`
-        group relative p-8 rounded-2xl shadow-sm border transition-all duration-300 flex flex-col items-start h-full animate-fade-in-up cursor-pointer select-none
-        ${isAnswered
-          ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-700'
-          : 'bg-white dark:bg-slate-800 border-rose-100/50 dark:border-slate-700 hover:shadow-md hover:border-rose-200 dark:hover:border-slate-600 hover:-translate-y-1'
-        }
-      `}
-      style={{ animationDelay, animationFillMode: 'both' }}
-      role="button"
-      aria-pressed={isAnswered}
-    >
-      <div className="w-full flex justify-between items-start mb-4">
-        {isAnswered ? (
-          <CheckCircle2 className="w-8 h-8 text-emerald-500 transition-all duration-300" />
-        ) : (
-          <Quote className="w-8 h-8 text-rose-200 dark:text-rose-800 group-hover:text-rose-400 dark:group-hover:text-rose-600 transition-colors" />
-        )}
-
-        <div className="flex items-center space-x-1 -mr-2 -mt-2">
-          <button
-            onClick={handleShareClick}
-            className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors focus:outline-none focus:ring-2 focus:ring-slate-200 dark:focus:ring-slate-600"
-            aria-label="Share question"
-          >
-            <Share2 className="w-5 h-5 text-slate-300 dark:text-slate-500 hover:text-slate-500 dark:hover:text-slate-300 transition-colors" />
-          </button>
-          <button
-            onClick={handleFavoriteClick}
-            className="p-2 rounded-full hover:bg-rose-50 dark:hover:bg-rose-900/30 transition-colors focus:outline-none focus:ring-2 focus:ring-rose-200 dark:focus:ring-rose-800"
-            aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
-          >
-            <Heart
-              className={`w-6 h-6 transition-all duration-300 ${
-                isFavorite
-                  ? 'fill-rose-500 text-rose-500 animate-heart-bounce'
-                  : 'text-slate-300 dark:text-slate-500 hover:text-rose-400 hover:scale-110'
-              }`}
-            />
-          </button>
-        </div>
-      </div>
-
-      <p className={`text-lg md:text-xl font-serif leading-relaxed font-medium transition-colors duration-300 ${isAnswered ? 'text-slate-500 dark:text-slate-400' : 'text-slate-800 dark:text-slate-200'}`}>
-        {text}
-      </p>
-
-      <div className="mt-auto pt-6 w-full flex justify-end">
-        <span className={`text-xs font-semibold uppercase tracking-wider transition-colors duration-300 ${isAnswered ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-300 dark:text-rose-700'}`}>
-          {isAnswered ? 'Answered' : `Q ${index + 1}`}
-        </span>
+}) => (
+  <article
+    className={`group relative flex h-full flex-col rounded-3xl border p-6 transition-all duration-300 animate-fade-in-up ${
+      isAnswered
+        ? 'bg-emerald-50/80 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20'
+        : 'bg-white dark:bg-slate-800/70 border-slate-200/70 dark:border-slate-700/60 shadow-sm hover:shadow-md hover:-translate-y-0.5'
+    }`}
+    style={{ animationDelay: `${Math.min(index, 12) * 40}ms` }}
+  >
+    <div className="mb-3 flex items-center justify-between gap-2">
+      <span className="truncate text-xs font-semibold uppercase tracking-wider text-rose-500/80 dark:text-rose-300/80">
+        {question.category || 'Question'}
+      </span>
+      <div className="-mr-2 -mt-1 flex shrink-0 items-center">
+        <button
+          type="button"
+          onClick={onShare}
+          className="rounded-full p-2 text-slate-300 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-600 dark:hover:text-slate-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
+          aria-label="Share question"
+        >
+          <Share2 className="h-[18px] w-[18px]" aria-hidden />
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            tapDouble();
+            onToggleSaved();
+          }}
+          className="rounded-full p-2 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
+          aria-pressed={isSaved}
+          aria-label={isSaved ? 'Remove from saved' : 'Save question'}
+        >
+          <Heart
+            className={`h-5 w-5 transition-all ${isSaved ? 'fill-rose-500 text-rose-500 animate-heart-bounce' : 'text-slate-300 dark:text-slate-500 hover:text-rose-400'}`}
+            aria-hidden
+          />
+        </button>
       </div>
     </div>
-  );
-};
+
+    <p
+      className={`font-serif text-xl leading-snug transition-colors ${
+        isAnswered ? 'text-slate-500 dark:text-slate-400' : 'text-slate-800 dark:text-slate-100'
+      }`}
+    >
+      {question.text}
+    </p>
+
+    <button
+      type="button"
+      onClick={() => {
+        tapLight();
+        onToggleAnswered();
+      }}
+      aria-pressed={isAnswered}
+      className={`mt-auto self-start pt-5 inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 ${
+        isAnswered ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'
+      }`}
+    >
+      <CircleCheck className="h-4 w-4" aria-hidden />
+      {isAnswered ? 'Answered' : 'Mark answered'}
+    </button>
+  </article>
+);

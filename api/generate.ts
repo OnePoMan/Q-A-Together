@@ -1,101 +1,96 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { GoogleGenAI, Type } from '@google/genai';
+import { BANK_EXTRA, BATCH_SIZE, type Question } from '../shared/vibes.js';
+import { buildPrompt, sample } from '../server/prompt.js';
+import { InputError, parseGenerateInput, sanitizeQuestions, type GenerateInput } from '../server/validate.js';
+import { RateLimiter } from '../server/rateLimit.js';
+import { UpstreamError, generateRaw } from '../server/gemini.js';
+import { HttpError, clientIp, fail, readJsonPost, sendError, type ApiRequest, type ApiResponse } from '../server/http.js';
+import { getStore, type Store } from '../server/store.js';
+import { addToBank, drawFromBank, reserveAiCall } from '../server/quota.js';
 
-const PRIMARY_MODEL = 'gemini-3-flash-preview';
-const FALLBACK_MODEL = 'gemini-3.1-flash-lite-preview';
+export type { ApiRequest, ApiResponse };
 
-const apiKey = process.env.GEMINI_API_KEY || '';
-const ai = new GoogleGenAI({ apiKey });
+const MIN_QUESTIONS = 8;
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+// First line of defence is the Vercel Firewall rule on /api/generate. This
+// per-instance limiter only catches bursts that reach one warm instance.
+const burstLimiter = new RateLimiter(8, 10 * 60 * 1000);
 
-  if (!apiKey) {
-    return res.status(500).json({ error: 'API key not configured' });
-  }
+type Source = 'ai' | 'bank';
 
+const NOTICES = {
+  daily_budget: "Today's fresh AI questions are used up. Dealing from the question bank until midnight Pacific.",
+  ip_daily: "You've had a lot of fresh decks today. Dealing from the question bank for now.",
+  upstream: 'The AI is busy right now. Dealing from the question bank instead.',
+} as const;
+
+async function serveFromBank(
+  res: ApiResponse,
+  store: Store,
+  input: GenerateInput,
+  notice: string,
+  fallback: HttpError,
+) {
+  const questions = await drawFromBank(store, input.vibe, input.previouslyAsked, BATCH_SIZE).catch(() => []);
+  if (questions.length === 0) return sendError(res, fallback);
+  return res.status(200).json({ questions, vibe: input.vibe, source: 'bank' satisfies Source, notice });
+}
+
+export default async function handler(req: ApiRequest, res: ApiResponse) {
+  let input: GenerateInput;
   try {
-    const { previouslyAsked = [] } = req.body || {};
-
-    // Cap to last 100 to stay within token limits
-    const recentHistory = Array.isArray(previouslyAsked)
-      ? previouslyAsked.slice(-100)
-      : [];
-
-    let prompt = `Generate 20 creative, intellectually stimulating, and entertaining questions for a couple to ask each other.
-
-Each question should be surprising, specific, and spark genuine debate or storytelling -- not something easily answered in one word. Aim for questions that make people pause, laugh, or say "oh, that's a good one."
-
-Draw from a WIDE variety of categories. Each batch should include questions from at least 8 of these categories, and no more than 3 from any single one:
-
-- Thought experiments & philosophy-lite (e.g., "If you could know the absolute truth to one question about the universe, but you could never share the answer, what would you ask?")
-- Creative dilemmas with no right answer (e.g., "You can either have a pause button for your own life or a rewind button, but only one -- which do you pick and why?")
-- Absurd hypotheticals played straight (e.g., "Every bird on Earth now works for you. What's your first order of business?")
-- Unexpected 'would you rather' scenarios (e.g., "Would you rather have your life narrated out loud by Morgan Freeman 24/7 or have a permanent laugh track that plays whenever something happens to you?")
-- Taste, culture & guilty pleasures (e.g., "What's a hill you'd die on that literally nobody else cares about?")
-- Time, memory & alternate lives (e.g., "If you could spend a year living in any decade of the past -- but you'd have no modern technology -- which decade and where?")
-- Superpowers & sci-fi premises (e.g., "You wake up and discover you can fluently speak to one species of animal. Which do you choose and what do you do first?")
-- Strategy & survival (e.g., "You have 24 hours to hide a giraffe from the FBI. What's your plan?")
-- Self-knowledge & quirks (e.g., "What's something you're embarrassingly competitive about?")
-- Food, travel & sensory experiences (e.g., "If you could teleport to any restaurant in the world right now, where are we going and what are we ordering?")
-- Collaborative imagination (e.g., "If we had to open a business together by next month with a $500 budget, what are we launching?")
-- Rapid-fire judgment calls (e.g., "Rank these in order of how much you'd panic: lost wallet, dead phone, spider on your shoulder, surprise public speaking")
-
-QUALITY GUIDELINES:
-- Favor specificity over vagueness. "What's a weird food combo you secretly love?" beats "What's your favorite food?"
-- Mix question lengths -- some punchy one-liners, some with a fun setup.
-- Vary the sentence structure: don't start every question with "If you could..."
-- Questions should feel fresh and modern, not like a generic icebreaker list.
-- Keep everything lighthearted and positive. No heavy, dark, or anxiety-inducing topics.
-
-Return the result as a JSON array of 20 strings.`;
-
-    if (recentHistory.length > 0) {
-      prompt += `\n\nIMPORTANT: The following questions have already been asked. DO NOT generate any of these or anything very similar to them:\n${JSON.stringify(recentHistory)}`;
-    }
-
-    const config = {
-      responseMimeType: 'application/json' as const,
-      responseSchema: {
-        type: Type.ARRAY,
-        items: { type: Type.STRING },
-      },
-      temperature: 0.95,
-    };
-
-    let response;
-    try {
-      response = await ai.models.generateContent({
-        model: PRIMARY_MODEL,
-        contents: prompt,
-        config,
-      });
-    } catch (primaryError: unknown) {
-      const status = (primaryError as { status?: number }).status;
-      if (status === 429 || status === 503) {
-        console.warn(`${PRIMARY_MODEL} returned ${status}, falling back to ${FALLBACK_MODEL}`);
-        response = await ai.models.generateContent({
-          model: FALLBACK_MODEL,
-          contents: prompt,
-          config,
-        });
-      } else {
-        throw primaryError;
-      }
-    }
-
-    const rawText = response.text;
-    if (!rawText) {
-      return res.status(500).json({ error: 'No content generated' });
-    }
-
-    const questions: string[] = JSON.parse(rawText);
-    return res.status(200).json({ questions });
+    const body = readJsonPost(req, res);
+    input = parseGenerateInput(body);
   } catch (error) {
-    console.error('Error generating questions:', error);
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    return res.status(500).json({ error: 'Failed to generate questions', details: message });
+    if (error instanceof HttpError) return sendError(res, error);
+    if (error instanceof InputError) return fail(res, 400, 'bad_request', error.message);
+    throw error;
   }
+
+  const ip = clientIp(req);
+  const retryAfter = burstLimiter.check(ip);
+  if (retryAfter > 0) {
+    return sendError(res, new HttpError(429, 'rate_limited', `Slow down a little. Try again in ${retryAfter}s.`), retryAfter);
+  }
+
+  const store = getStore();
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    console.error('[generate] GEMINI_API_KEY is not set');
+    return fail(res, 503, 'not_configured', 'The question generator is not configured yet.');
+  }
+
+  const quota = await reserveAiCall(store, ip).catch(error => {
+    // Fail open: Gemini's own quota is still the hard stop.
+    console.error('[generate] quota check failed:', error);
+    return { ok: true } as const;
+  });
+  if (!quota.ok) {
+    return serveFromBank(res, store, input, NOTICES[quota.reason], new HttpError(429, quota.reason, NOTICES[quota.reason].split('.')[0] + '.'));
+  }
+
+  const count = BATCH_SIZE + BANK_EXTRA;
+  const { system, user, categories } = buildPrompt(input.vibe, input.previouslyAsked, count, Math.random, input);
+
+  let questions: Question[];
+  try {
+    const { data, model } = await generateRaw({ apiKey, system, prompt: user, categories });
+    // Models tend to return questions grouped by category; shuffle so a deck mixes them.
+    questions = sample(sanitizeQuestions(data, categories, input.previouslyAsked, count), count);
+    if (questions.length < MIN_QUESTIONS) {
+      console.error(`[generate] ${model} returned only ${questions.length} usable questions`);
+      return serveFromBank(res, store, input, NOTICES.upstream, new HttpError(502, 'bad_output', 'The AI had an off moment. Try again.'));
+    }
+  } catch (error) {
+    // Details stay in the server logs; clients only get a stable code.
+    console.error('[generate] failed:', error);
+    const status = error instanceof UpstreamError ? error.status : undefined;
+    const fallback =
+      status === 429
+        ? new HttpError(503, 'upstream_busy', 'The AI is busy right now. Try again in a minute.')
+        : new HttpError(502, 'upstream_error', "Couldn't reach the AI. Try again shortly.");
+    return serveFromBank(res, store, input, NOTICES.upstream, fallback);
+  }
+
+  await addToBank(store, input.vibe, questions).catch(error => console.error('[generate] bank write failed:', error));
+  return res.status(200).json({ questions: questions.slice(0, BATCH_SIZE), vibe: input.vibe, source: 'ai' satisfies Source });
 }
