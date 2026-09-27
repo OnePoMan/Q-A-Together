@@ -1,5 +1,5 @@
 import React from 'react';
-import { CircleCheck, Heart, Share2 } from 'lucide-react';
+import { CircleCheck, Heart, NotebookPen, Share2 } from 'lucide-react';
 import type { Question } from '../shared/vibes';
 import { tapDouble, tapLight } from '../utils/haptics';
 
@@ -11,6 +11,8 @@ interface QuestionCardProps {
   onToggleSaved: () => void;
   onToggleAnswered: () => void;
   onShare: () => void;
+  onOpenJournal: () => void;
+  hasJournal: boolean;
 }
 
 export const QuestionCard: React.FC<QuestionCardProps> = ({
@@ -21,6 +23,8 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
   onToggleSaved,
   onToggleAnswered,
   onShare,
+  onOpenJournal,
+  hasJournal,
 }) => (
   <article
     className={`group relative flex h-full flex-col rounded-3xl border p-6 transition-all duration-300 animate-fade-in-up ${
@@ -35,6 +39,15 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
         {question.category || 'Question'}
       </span>
       <div className="-mr-2 -mt-1 flex shrink-0 items-center">
+        <button
+          type="button"
+          onClick={onOpenJournal}
+          className="relative rounded-full p-2 text-slate-300 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-600 dark:hover:text-slate-300 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
+          aria-label={hasJournal ? 'Edit your remembered answers' : 'Write down your answers'}
+        >
+          <NotebookPen className="h-[18px] w-[18px]" aria-hidden />
+          {hasJournal && <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-rose-500" aria-hidden />}
+        </button>
         <button
           type="button"
           onClick={onShare}

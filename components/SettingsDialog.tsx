@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { DEFAULT_NAMES } from '../shared/brand';
 import { Download, Lock, Monitor, Moon, RotateCcw, Sun, Trash, X } from 'lucide-react';
 import type { ThemePreference } from '../hooks/useTheme';
 
@@ -87,7 +88,7 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({
                 value={names[i]}
                 maxLength={24}
                 autoComplete="off"
-                placeholder={`Player ${i + 1}`}
+                placeholder={DEFAULT_NAMES[i]}
                 aria-label={`Player ${i + 1} name`}
                 onChange={e => {
                   const next: [string, string] = [...names];

@@ -6,5 +6,5 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   size?: 'md' | 'lg';
 }
 
-export type View = 'home' | 'play' | 'saved';
+export type View = 'home' | 'play' | 'saved' | 'memories';
 export type PlayLayout = 'card' | 'list';

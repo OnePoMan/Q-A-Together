@@ -5,6 +5,7 @@ import { defineConfig, loadEnv, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
+import { APP_NAME, APP_SHORT_NAME } from './shared/brand';
 
 const MAX_DEV_BODY = 64 * 1024;
 
@@ -101,8 +102,8 @@ export default defineConfig(({ mode }) => {
         includeAssets: ['apple-touch-icon.png', 'theme-init.js'],
         manifest: {
           id: '/',
-          name: 'Q&A Together',
-          short_name: 'Q&A Together',
+          name: APP_NAME,
+          short_name: APP_SHORT_NAME,
           description: 'Conversation-starter questions for couples. Date nights, walks and long drives.',
           start_url: '/',
           scope: '/',

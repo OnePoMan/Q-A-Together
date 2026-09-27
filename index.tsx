@@ -2,6 +2,10 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import './styles/main.css';
+import { importFromLocation } from './lib/transfer';
+
+// Must run before the first render so the app starts with the imported data.
+importFromLocation();
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {

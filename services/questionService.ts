@@ -22,9 +22,30 @@ export class GenerateError extends Error {
   constructor(
     message: string,
     readonly code: string,
+    /** When set, the server asked us to back off until this time (ms since epoch). */
+    readonly retryAt?: number,
   ) {
     super(message);
   }
+}
+
+export const RATE_LIMIT_NOTICE = 'Too many recent requests - here are some saved questions as you wait.';
+
+// The Vercel Firewall rule on /api/generate allows 3 requests per 10-minute
+// fixed window per IP and does not say when the block lifts, so we estimate it
+// from our own recent requests. Keep in sync with the rule in the dashboard.
+const FIREWALL_WINDOW_MS = 10 * 60 * 1000;
+const REQUEST_LOG_KEY = 'qa-ai-requests';
+
+function logRequest(now = Date.now()) {
+  const recent = readJson<number[]>(REQUEST_LOG_KEY, []).filter(t => now - t < FIREWALL_WINDOW_MS);
+  writeJson(REQUEST_LOG_KEY, [...recent, now].slice(-10));
+}
+
+/** Best guess at when the firewall's current window ends for this device. */
+export function estimateFirewallReset(now = Date.now()): number {
+  const recent = readJson<number[]>(REQUEST_LOG_KEY, []).filter(t => now - t < FIREWALL_WINDOW_MS);
+  return (recent.length ? Math.min(...recent) : now) + FIREWALL_WINDOW_MS;
 }
 
 function readCache(): Cache {
@@ -66,6 +87,7 @@ export interface GenerateResponse {
 
 export async function fetchQuestions(request: GenerateRequest): Promise<GenerateResponse> {
   let response: Response;
+  logRequest();
   try {
     response = await fetch('/api/generate', {
       method: 'POST',
@@ -78,6 +100,12 @@ export async function fetchQuestions(request: GenerateRequest): Promise<Generate
   }
 
   const data = await response.json().catch(() => ({}));
+  const blockedByFirewall = response.headers.get('x-vercel-mitigated') !== null;
+  if (blockedByFirewall || response.status === 429) {
+    const retryAfter = Number(response.headers.get('retry-after'));
+    const retryAt = Number.isFinite(retryAfter) && retryAfter > 0 ? Date.now() + retryAfter * 1000 : estimateFirewallReset();
+    throw new GenerateError(RATE_LIMIT_NOTICE, 'rate_limited', retryAt);
+  }
   if (!response.ok) {
     throw new GenerateError(
       typeof data.message === 'string' ? data.message : `Server error (${response.status}).`,
@@ -137,6 +165,8 @@ export function getOfflineQuestions(vibe: VibeId, history: readonly string[], co
 
 export interface DeckContext {
   isOnline: boolean;
+  /** Skip the API until this time (ms since epoch) after being rate limited. */
+  cooldownUntil?: number | null;
   /** Everything seen so far (non-explicit), for de-duplication. */
   history: readonly string[];
   /** Seen per vibe: what gets sent to the server. */
@@ -150,6 +180,8 @@ export interface DeckContext {
 export interface BuiltDeck {
   questions: Question[];
   notice: string | null;
+  /** Set when rate limited: fresh AI questions are available again at this time. */
+  retryAt?: number;
 }
 
 const forServer = (questions: readonly Question[]) =>
@@ -162,8 +194,13 @@ export async function buildDeck(vibe: VibeId, ctx: DeckContext): Promise<BuiltDe
 
   let questions: Question[] = [];
   let notice: string | null = null;
+  let retryAt: number | undefined;
 
-  if (ctx.isOnline) {
+  const coolingDown = !!ctx.cooldownUntil && ctx.cooldownUntil > Date.now();
+  if (coolingDown) {
+    notice = RATE_LIMIT_NOTICE;
+    retryAt = ctx.cooldownUntil ?? undefined;
+  } else if (ctx.isOnline) {
     try {
       const sent = vibe === 'mix' ? ctx.history : ctx.historyByVibe[vibe] ?? [];
       const result = await fetchQuestions({
@@ -175,7 +212,12 @@ export async function buildDeck(vibe: VibeId, ctx: DeckContext): Promise<BuiltDe
       questions = result.questions.filter(q => !seen.has(normalizeQuestion(q.text))).slice(0, target);
       notice = result.notice ?? null;
     } catch (err) {
-      notice = `${err instanceof Error ? err.message : "Couldn't reach the AI."} Dealt from saved and built-in questions instead.`;
+      if (err instanceof GenerateError && err.code === 'rate_limited') {
+        notice = RATE_LIMIT_NOTICE;
+        retryAt = err.retryAt;
+      } else {
+        notice = `${err instanceof Error ? err.message : "Couldn't reach the AI."} Dealt from saved and built-in questions instead.`;
+      }
     }
   }
 
@@ -199,5 +241,5 @@ export async function buildDeck(vibe: VibeId, ctx: DeckContext): Promise<BuiltDe
     questions = [...mixed, ...explicit];
   }
 
-  return { questions, notice: questions.length ? notice : notice ?? 'No questions available right now.' };
+  return { questions, notice: questions.length ? notice : notice ?? 'No questions available right now.', retryAt };
 }

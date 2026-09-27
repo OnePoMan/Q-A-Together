@@ -5,7 +5,7 @@ import { RateLimiter } from '../server/rateLimit.js';
 import { UpstreamError, generateRaw } from '../server/gemini.js';
 import { HttpError, clientIp, fail, readJsonPost, sendError, type ApiRequest, type ApiResponse } from '../server/http.js';
 import { getStore, type Store } from '../server/store.js';
-import { addToBank, drawFromBank, reserveAiCall } from '../server/quota.js';
+import { addToBank, drawFromBank, reserveAiCall, secondsUntilPacificMidnight } from '../server/quota.js';
 
 export type { ApiRequest, ApiResponse };
 
@@ -29,9 +29,10 @@ async function serveFromBank(
   input: GenerateInput,
   notice: string,
   fallback: HttpError,
+  retryAfter?: number,
 ) {
   const questions = await drawFromBank(store, input.vibe, input.previouslyAsked, BATCH_SIZE).catch(() => []);
-  if (questions.length === 0) return sendError(res, fallback);
+  if (questions.length === 0) return sendError(res, fallback, retryAfter);
   return res.status(200).json({ questions, vibe: input.vibe, source: 'bank' satisfies Source, notice });
 }
 
@@ -65,7 +66,14 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     return { ok: true } as const;
   });
   if (!quota.ok) {
-    return serveFromBank(res, store, input, NOTICES[quota.reason], new HttpError(429, quota.reason, NOTICES[quota.reason].split('.')[0] + '.'));
+    return serveFromBank(
+      res,
+      store,
+      input,
+      NOTICES[quota.reason],
+      new HttpError(429, quota.reason, NOTICES[quota.reason].split('.')[0] + '.'),
+      secondsUntilPacificMidnight(),
+    );
   }
 
   const count = BATCH_SIZE + BANK_EXTRA;

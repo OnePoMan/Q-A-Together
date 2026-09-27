@@ -1,7 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, BookHeart, Heart, LayoutGrid, Layers, Play, Settings, Shuffle, Sparkles, Users } from 'lucide-react';
+import { ArrowLeft, BookHeart, BookOpen, Heart, LayoutGrid, Layers, Play, Settings, Shuffle, Sparkles, Users } from 'lucide-react';
 import { buildDeck } from './services/questionService';
 import { AgeGateDialog } from './components/AgeGateDialog';
+import { CooldownNotice } from './components/CooldownNotice';
+import { JournalDialog } from './components/JournalDialog';
+import { MemoriesView } from './components/MemoriesView';
+import { MoveBanner } from './components/MoveBanner';
+import { IMPORTED_FLAG } from './lib/transfer';
+import { ShareDialog } from './components/ShareDialog';
 import { Button } from './components/Button';
 import { LoadingDeck } from './components/LoadingDeck';
 import { OfflineBanner } from './components/OfflineBanner';
@@ -17,6 +23,9 @@ import { useLocalStorage } from './hooks/useLocalStorage';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { useRoom, type RoomDeck } from './hooks/useRoom';
 import { useTheme } from './hooks/useTheme';
+import { useWakeLock } from './hooks/useWakeLock';
+import { MAX_JOURNAL_ENTRIES, hasAnswers, type Journal } from './lib/journal';
+import { APP_NAME, APP_URL } from './shared/brand';
 import { readJson } from './lib/storage';
 import { DEFAULT_VIBE, getVibe, isVibeId, normalizeQuestion, type Question, type VibeId } from './shared/vibes';
 import type { PlayLayout, View } from './types';
@@ -63,6 +72,8 @@ const App: React.FC = () => {
   const [localHistory, setLocalHistory] = useLocalStorage<string[]>('qa-history-local', []);
   const [disliked, setDisliked] = useLocalStorage<Question[]>('qa-disliked', []);
   const [adultOk, setAdultOk] = useLocalStorage<boolean>('qa-adult-ok', false);
+  const [journal, setJournal] = useLocalStorage<Journal>('qa-journal', {});
+  const [cooldownUntil, setCooldownUntil] = useLocalStorage<number | null>('qa-cooldown-until', null);
   const [saved, setSaved] = useLocalStorage<Question[]>('qa-saved', loadSaved);
   const [answered, setAnswered] = useLocalStorage<Record<string, boolean>>('qa-answered', {});
   const [deck, setDeck] = useLocalStorage<Deck | null>('qa-deck', null);
@@ -76,6 +87,8 @@ const App: React.FC = () => {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [ageGateOpen, setAgeGateOpen] = useState(false);
   const [roomOpen, setRoomOpen] = useState(false);
+  const [journalTarget, setJournalTarget] = useState<Question | null>(null);
+  const [shareTarget, setShareTarget] = useState<Question | null>(null);
 
   const isOnline = useOnlineStatus();
   const { preference: theme, setPreference: setTheme } = useTheme();
@@ -105,8 +118,9 @@ const App: React.FC = () => {
       tapMedium();
       window.scrollTo({ top: 0, behavior: 'smooth' });
 
-      const { questions, notice } = await buildDeck(nextVibe, {
+      const { questions, notice, retryAt } = await buildDeck(nextVibe, {
         isOnline,
+        cooldownUntil,
         history,
         historyByVibe,
         localHistory,
@@ -131,11 +145,13 @@ const App: React.FC = () => {
           ),
         );
         if (room.code) room.pushDeck(next);
-        if (notice) setToast(notice);
+        // A rate-limit notice is shown with a live countdown instead of a toast.
+        if (retryAt) setCooldownUntil(retryAt);
+        else if (notice) setToast(notice);
       }
       setIsLoading(false);
     },
-    [vibe, isLoading, isOnline, history, historyByVibe, localHistory, saved, disliked, room, setDeck, setHistory, setHistoryByVibe, setLocalHistory],
+    [vibe, isLoading, isOnline, cooldownUntil, setCooldownUntil, history, historyByVibe, localHistory, saved, disliked, room, setDeck, setHistory, setHistoryByVibe, setLocalHistory],
   );
 
   const setDeckIndex = (index: number) => {
@@ -172,9 +188,9 @@ const App: React.FC = () => {
   }, [room]);
 
   const shareInvite = async (url: string) => {
-    const text = 'Join me on Q&A Together';
+    const text = `Join me on ${APP_NAME}`;
     try {
-      if (navigator.share) await navigator.share({ title: 'Q&A Together', text, url });
+      if (navigator.share) await navigator.share({ title: APP_NAME, text, url });
       else {
         await navigator.clipboard.writeText(url);
         setToast('Invite link copied');
@@ -200,13 +216,17 @@ const App: React.FC = () => {
       return trimRecord(next, MAX_ANSWERED);
     });
 
-  const share = async (q: Question) => {
+  const share = (q: Question) => {
     tapShort();
-    const url = window.location.origin;
-    const text = `"${q.text}"\n\nFrom Q&A Together`;
+    setShareTarget(q);
+  };
+
+  const shareText = async (q: Question) => {
+    const url = APP_URL;
+    const text = `"${q.text}"\n\nFrom ${APP_NAME}`;
     try {
       if (navigator.share) {
-        await navigator.share({ title: 'Q&A Together', text, url });
+        await navigator.share({ title: APP_NAME, text, url });
       } else {
         await navigator.clipboard.writeText(`${text}: ${url}`);
         setToast('Copied to clipboard');
@@ -224,6 +244,40 @@ const App: React.FC = () => {
     setLayout('card');
     setView('play');
   };
+
+  const saveJournal = (q: Question, answers: [string, string]) => {
+    setJournal(prev => {
+      const next = { ...prev, [q.text]: { question: { text: q.text, category: q.category }, answers, updatedAt: Date.now() } };
+      const keys = Object.keys(next);
+      return keys.length > MAX_JOURNAL_ENTRIES ? Object.fromEntries(Object.entries(next).slice(-MAX_JOURNAL_ENTRIES)) : next;
+    });
+    setToast('Saved to Memories');
+  };
+  const deleteJournal = (q: Question) => {
+    setJournal(prev => {
+      const next = { ...prev };
+      delete next[q.text];
+      return next;
+    });
+    setToast('Memory deleted');
+  };
+  const hasJournal = useCallback((q: Question) => hasAnswers(journal[q.text]), [journal]);
+  const clearCooldown = useCallback(() => setCooldownUntil(null), [setCooldownUntil]);
+  const activeCooldown = cooldownUntil && cooldownUntil > Date.now() ? cooldownUntil : null;
+
+  useWakeLock(view === 'play' && !!validDeck);
+
+  // Confirm a data move from the old address (see lib/transfer.ts).
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem(IMPORTED_FLAG)) {
+        sessionStorage.removeItem(IMPORTED_FLAG);
+        setToast('Your saved questions and memories moved over');
+      }
+    } catch {
+      // storage unavailable
+    }
+  }, []);
 
   const deckAnsweredCount = validDeck ? validDeck.questions.filter(q => answered[q.text]).length : 0;
 
@@ -246,7 +300,10 @@ const App: React.FC = () => {
             <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-rose-500 text-white shadow-md shadow-rose-500/30">
               <Heart className="h-4 w-4 fill-white" aria-hidden />
             </span>
-            <span className="font-serif text-xl font-semibold">Q&amp;A Together</span>
+            <span className="flex flex-col text-left leading-none">
+              <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-rose-500">Q&amp;A with</span>
+              <span className="font-serif text-lg sm:text-xl font-semibold">Ethan &amp; Brianna</span>
+            </span>
           </button>
 
           <nav className="flex items-center gap-1" aria-label="Main">
@@ -281,6 +338,20 @@ const App: React.FC = () => {
             </button>
             <button
               type="button"
+              onClick={() => setView(view === 'memories' ? (validDeck ? 'play' : 'home') : 'memories')}
+              aria-current={view === 'memories' ? 'page' : undefined}
+              aria-label="Memories"
+              className={`flex items-center gap-2 rounded-full px-3 py-2 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 ${
+                view === 'memories'
+                  ? 'bg-rose-100 dark:bg-rose-500/15 text-rose-700 dark:text-rose-200'
+                  : 'text-slate-600 dark:text-slate-300 hover:bg-rose-50 dark:hover:bg-slate-800'
+              }`}
+            >
+              <BookOpen className="h-4 w-4" aria-hidden />
+              <span className="hidden sm:inline">Memories</span>
+            </button>
+            <button
+              type="button"
               onClick={() => {
                 tapShort();
                 setSettingsOpen(true);
@@ -294,6 +365,7 @@ const App: React.FC = () => {
         </div>
       </header>
 
+      <MoveBanner />
       {!isOnline && <OfflineBanner />}
 
       <main id="main" className="mx-auto w-full max-w-6xl flex-grow px-4 sm:px-6 pt-8 sm:pt-12 pb-[calc(3rem+env(safe-area-inset-bottom))]">
@@ -337,6 +409,12 @@ const App: React.FC = () => {
             {error && (
               <div role="alert" className="mt-6 rounded-2xl border border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-500/10 p-4 text-sm text-red-700 dark:text-red-300">
                 {error}
+              </div>
+            )}
+
+            {activeCooldown && (
+              <div className="mt-6">
+                <CooldownNotice until={activeCooldown} onDone={clearCooldown} />
               </div>
             )}
 
@@ -413,6 +491,8 @@ const App: React.FC = () => {
               </div>
             </div>
 
+            {activeCooldown && !isLoading && <CooldownNotice until={activeCooldown} onDone={clearCooldown} />}
+
             {isLoading || !validDeck ? (
               isLoading ? (
                 <LoadingDeck />
@@ -441,6 +521,8 @@ const App: React.FC = () => {
                 onDealMore={() => deal(validDeck.label ? vibe : validDeck.vibe)}
                 onChangeVibe={() => setView('home')}
                 onEditNames={() => setSettingsOpen(true)}
+                onOpenJournal={setJournalTarget}
+                hasJournal={hasJournal}
               />
             ) : (
               <>
@@ -455,6 +537,8 @@ const App: React.FC = () => {
                       onToggleSaved={() => toggleSaved(q)}
                       onToggleAnswered={() => setAnsweredFor(q, !answered[q.text])}
                       onShare={() => share(q)}
+                      onOpenJournal={() => setJournalTarget(q)}
+                      hasJournal={hasJournal(q)}
                     />
                   ))}
                 </div>
@@ -498,6 +582,8 @@ const App: React.FC = () => {
                     onToggleSaved={() => toggleSaved(q)}
                     onToggleAnswered={() => setAnsweredFor(q, !answered[q.text])}
                     onShare={() => share(q)}
+                    onOpenJournal={() => setJournalTarget(q)}
+                    hasJournal={hasJournal(q)}
                   />
                 ))}
               </div>
@@ -515,10 +601,18 @@ const App: React.FC = () => {
             )}
           </div>
         )}
+        {view === 'memories' && (
+          <MemoriesView
+            journal={journal}
+            names={names}
+            onEdit={entry => setJournalTarget(entry.question)}
+            onFindQuestions={() => setView(validDeck ? 'play' : 'home')}
+          />
+        )}
       </main>
 
       <footer className="border-t border-slate-200/60 dark:border-slate-800/80 py-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] text-center text-xs text-slate-400 dark:text-slate-500">
-        Made for curious couples · Questions by Google Gemini
+        Made for Ethan &amp; Brianna · Questions by Google Gemini
       </footer>
 
       <SettingsDialog
@@ -547,6 +641,23 @@ const App: React.FC = () => {
           if (vibe === 'spicy') setVibe(DEFAULT_VIBE);
           setToast('Spicy is locked');
         }}
+      />
+
+      <JournalDialog
+        question={journalTarget}
+        entry={journalTarget ? journal[journalTarget.text] : undefined}
+        names={names}
+        onSave={saveJournal}
+        onDelete={deleteJournal}
+        onClose={() => setJournalTarget(null)}
+      />
+
+      <ShareDialog
+        question={shareTarget}
+        vibe={validDeck?.vibe ?? vibe}
+        onClose={() => setShareTarget(null)}
+        onShareText={shareText}
+        onToast={setToast}
       />
 
       <AgeGateDialog
