@@ -137,6 +137,6 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   } catch (error) {
     if (error instanceof HttpError) return sendError(res, error);
     console.error('[room] failed:', error);
-    return sendError(res, new HttpError(500, 'failed', 'Room service error. Try again.'));
+    return sendError(res, new HttpError(503, 'unavailable', 'Rooms are unavailable right now. Try again later.'));
   }
 }

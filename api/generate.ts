@@ -1,5 +1,5 @@
 import { BANK_EXTRA, BATCH_SIZE, type Question } from '../shared/vibes.js';
-import { buildPrompt } from '../server/prompt.js';
+import { buildPrompt, sample } from '../server/prompt.js';
 import { InputError, parseGenerateInput, sanitizeQuestions, type GenerateInput } from '../server/validate.js';
 import { RateLimiter } from '../server/rateLimit.js';
 import { UpstreamError, generateRaw } from '../server/gemini.js';
@@ -74,7 +74,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   let questions: Question[];
   try {
     const { data, model } = await generateRaw({ apiKey, system, prompt: user, categories });
-    questions = sanitizeQuestions(data, categories, input.previouslyAsked, count);
+    // Models tend to return questions grouped by category; shuffle so a deck mixes them.
+    questions = sample(sanitizeQuestions(data, categories, input.previouslyAsked, count), count);
     if (questions.length < MIN_QUESTIONS) {
       console.error(`[generate] ${model} returned only ${questions.length} usable questions`);
       return serveFromBank(res, store, input, NOTICES.upstream, new HttpError(502, 'bad_output', 'The AI had an off moment. Try again.'));
