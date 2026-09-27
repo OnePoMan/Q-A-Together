@@ -4,6 +4,8 @@
 @import "@fontsource-variable/playfair-display/wght-italic.css";
 
 @custom-variant dark (&:where(.dark, .dark *));
+/* Phone layout, chosen by hooks/useDisplayMode.ts (Auto / Phone / Desktop). */
+@custom-variant phone (&:where([data-display=phone], [data-display=phone] *));
 
 @theme {
   --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
@@ -37,12 +39,27 @@ h1, h2, h3, .font-serif {
 
 /* No fill-mode: once finished, inline drag transforms must take over. */
 @keyframes card-in-right {
-  from { opacity: 0; transform: translateX(40px) rotate(2deg); }
+  from { opacity: 0; transform: perspective(1200px) translateX(48px) rotateY(-28deg) rotate(2deg); }
   to { opacity: 1; transform: none; }
 }
 @keyframes card-in-left {
-  from { opacity: 0; transform: translateX(-40px) rotate(-2deg); }
+  from { opacity: 0; transform: perspective(1200px) translateX(-48px) rotateY(28deg) rotate(-2deg); }
   to { opacity: 1; transform: none; }
+}
+/* A fresh deck drops onto the table. Fill backwards so delayed layers start hidden. */
+@keyframes deal-in {
+  0% { opacity: 0; transform: translateY(-70px) rotate(-6deg) scale(0.94); }
+  60% { opacity: 1; transform: translateY(6px) rotate(0.5deg) scale(1.01); }
+  100% { opacity: 1; transform: none; }
+}
+@keyframes heart-float {
+  0% { opacity: 0; transform: translateY(0) scale(0.6); }
+  20% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-140px) scale(1.15) rotate(12deg); }
+}
+@keyframes hourglass {
+  0%, 80% { transform: rotate(0); }
+  100% { transform: rotate(180deg); }
 }
 @keyframes deal {
   0%, 100% { transform: translateY(0) rotate(0); }
@@ -62,10 +79,20 @@ h1, h2, h3, .font-serif {
   animation: fade-in-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) backwards;
 }
 @utility animate-card-in-right {
-  animation: card-in-right 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: card-in-right 0.45s cubic-bezier(0.16, 1, 0.3, 1);
 }
 @utility animate-card-in-left {
-  animation: card-in-left 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: card-in-left 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@utility animate-deal-in {
+  animation: deal-in 0.65s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+@utility animate-heart-float {
+  animation: heart-float 0.9s ease-out forwards;
+  opacity: 0;
+}
+@utility animate-hourglass {
+  animation: hourglass 2s ease-in-out infinite;
 }
 @utility animate-deal {
   animation: deal 1.6s ease-in-out infinite;

@@ -9,6 +9,20 @@ export function pacificDay(now = new Date()): string {
 
 const DAY_TTL = 36 * 60 * 60;
 
+/** Seconds until the next Pacific-time midnight, when the daily budget resets. */
+export function secondsUntilPacificMidnight(now = new Date()): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Los_Angeles',
+    hour: 'numeric',
+    minute: 'numeric',
+    second: 'numeric',
+    hourCycle: 'h23',
+  }).formatToParts(now);
+  const get = (type: string) => Number(parts.find(p => p.type === type)?.value ?? 0);
+  const elapsed = get('hour') * 3600 + get('minute') * 60 + get('second');
+  return Math.max(1, 24 * 3600 - elapsed);
+}
+
 const intFromEnv = (value: string | undefined, fallback: number) => {
   const parsed = Number.parseInt(value ?? '', 10);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;

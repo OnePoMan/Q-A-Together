@@ -162,3 +162,11 @@ describe('room handler', () => {
     expect(creates.at(-1)).toBe(429);
   });
 });
+
+describe('secondsUntilPacificMidnight', () => {
+  it('counts down to midnight in Los Angeles', async () => {
+    const { secondsUntilPacificMidnight } = await import('../server/quota');
+    // 23:00 PDT on Sep 26 = 06:00 UTC on Sep 27.
+    expect(secondsUntilPacificMidnight(new Date('2026-09-27T06:00:00Z'))).toBe(3600);
+  });
+});
