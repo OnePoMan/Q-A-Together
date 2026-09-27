@@ -1,11 +1,13 @@
-import React, { useCallback, useMemo, useState } from 'react';
-import { ArrowLeft, BookHeart, Heart, LayoutGrid, Layers, Play, Settings, Shuffle, Sparkles } from 'lucide-react';
-import { fetchQuestions, getOfflineQuestions } from './services/questionService';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowLeft, BookHeart, Heart, LayoutGrid, Layers, Play, Settings, Shuffle, Sparkles, Users } from 'lucide-react';
+import { buildDeck } from './services/questionService';
+import { AgeGateDialog } from './components/AgeGateDialog';
 import { Button } from './components/Button';
 import { LoadingDeck } from './components/LoadingDeck';
 import { OfflineBanner } from './components/OfflineBanner';
 import { PlayStage } from './components/PlayStage';
 import { QuestionCard } from './components/QuestionCard';
+import { RoomDialog } from './components/RoomDialog';
 import { SettingsDialog } from './components/SettingsDialog';
 import { Toast } from './components/Toast';
 import { VibePicker } from './components/VibePicker';
@@ -13,6 +15,7 @@ import { VIBE_STYLES } from './components/vibeMeta';
 import { useInstallPrompt } from './hooks/useInstallPrompt';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
+import { useRoom, type RoomDeck } from './hooks/useRoom';
 import { useTheme } from './hooks/useTheme';
 import { readJson } from './lib/storage';
 import { DEFAULT_VIBE, getVibe, isVibeId, normalizeQuestion, type Question, type VibeId } from './shared/vibes';
@@ -27,7 +30,16 @@ interface Deck {
 }
 
 const MAX_HISTORY = 600;
+const MAX_HISTORY_PER_VIBE = 150;
+const MAX_LOCAL_HISTORY = 200;
+const MAX_DISLIKED = 100;
 const MAX_ANSWERED = 1500;
+
+const appendUnique = (list: readonly string[], texts: readonly string[], max: number) => {
+  const seen = new Set(list.map(normalizeQuestion));
+  const fresh = texts.filter(t => !seen.has(normalizeQuestion(t)));
+  return [...list, ...fresh].slice(-max);
+};
 
 /** v1 stored favorites as plain strings under qa-favorites. */
 const loadSaved = (): Question[] => {
@@ -46,6 +58,11 @@ const App: React.FC = () => {
   const [storedVibe, setVibe] = useLocalStorage<VibeId>('qa-vibe', DEFAULT_VIBE);
   const vibe = isVibeId(storedVibe) ? storedVibe : DEFAULT_VIBE;
   const [history, setHistory] = useLocalStorage<string[]>('qa-history', []);
+  const [historyByVibe, setHistoryByVibe] = useLocalStorage<Partial<Record<VibeId, string[]>>>('qa-history-vibe', {});
+  // 18+ hand-written cards: tracked separately and never sent to the server.
+  const [localHistory, setLocalHistory] = useLocalStorage<string[]>('qa-history-local', []);
+  const [disliked, setDisliked] = useLocalStorage<Question[]>('qa-disliked', []);
+  const [adultOk, setAdultOk] = useLocalStorage<boolean>('qa-adult-ok', false);
   const [saved, setSaved] = useLocalStorage<Question[]>('qa-saved', loadSaved);
   const [answered, setAnswered] = useLocalStorage<Record<string, boolean>>('qa-answered', {});
   const [deck, setDeck] = useLocalStorage<Deck | null>('qa-deck', null);
@@ -57,6 +74,8 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [ageGateOpen, setAgeGateOpen] = useState(false);
+  const [roomOpen, setRoomOpen] = useState(false);
 
   const isOnline = useOnlineStatus();
   const { preference: theme, setPreference: setTheme } = useTheme();
@@ -65,6 +84,14 @@ const App: React.FC = () => {
   const savedKeys = useMemo(() => new Set(saved.map(q => normalizeQuestion(q.text))), [saved]);
   const isSaved = useCallback((q: Question) => savedKeys.has(normalizeQuestion(q.text)), [savedKeys]);
   const clearToast = useCallback(() => setToast(null), []);
+
+  const room = useRoom(
+    (remote: RoomDeck) => {
+      setDeck(remote);
+      setView('play');
+    },
+    message => setToast(message),
+  );
 
   const validDeck = deck && isVibeId(deck.vibe) && Array.isArray(deck.questions) && deck.questions.length > 0 ? deck : null;
   const deckInProgress = validDeck && validDeck.index < validDeck.questions.length ? validDeck : null;
@@ -78,36 +105,84 @@ const App: React.FC = () => {
       tapMedium();
       window.scrollTo({ top: 0, behavior: 'smooth' });
 
-      let questions: Question[] = [];
-      let note: string | null = null;
-      if (isOnline) {
-        try {
-          questions = await fetchQuestions(nextVibe, history);
-        } catch (err) {
-          questions = getOfflineQuestions(nextVibe, history);
-          const reason = err instanceof Error ? err.message : "Couldn't reach the AI.";
-          note = questions.length ? `${reason} Dealt from saved and built-in questions instead.` : reason;
-        }
-      } else {
-        questions = getOfflineQuestions(nextVibe, history);
-      }
+      const { questions, notice } = await buildDeck(nextVibe, {
+        isOnline,
+        history,
+        historyByVibe,
+        localHistory,
+        saved,
+        disliked,
+      });
 
       if (questions.length === 0) {
-        setError(note ?? 'No questions available right now. Try again when you are online.');
+        setError(notice ?? 'No questions available right now. Try again when you are online.');
         setView('home');
       } else {
-        setDeck({ vibe: nextVibe, questions, index: 0 });
-        setHistory(prev => {
-          const seen = new Set(prev.map(normalizeQuestion));
-          const fresh = questions.map(q => q.text).filter(t => !seen.has(normalizeQuestion(t)));
-          return [...prev, ...fresh].slice(-MAX_HISTORY);
-        });
-        if (note) setToast(note);
+        const next = { vibe: nextVibe, questions, index: 0 };
+        setDeck(next);
+        const shared = questions.filter(q => !q.local).map(q => q.text);
+        setHistory(prev => appendUnique(prev, shared, MAX_HISTORY));
+        setHistoryByVibe(prev => ({ ...prev, [nextVibe]: appendUnique(prev[nextVibe] ?? [], shared, MAX_HISTORY_PER_VIBE) }));
+        setLocalHistory(prev =>
+          appendUnique(
+            prev,
+            questions.filter(q => q.local).map(q => q.text),
+            MAX_LOCAL_HISTORY,
+          ),
+        );
+        if (room.code) room.pushDeck(next);
+        if (notice) setToast(notice);
       }
       setIsLoading(false);
     },
-    [vibe, isLoading, isOnline, history, setDeck, setHistory],
+    [vibe, isLoading, isOnline, history, historyByVibe, localHistory, saved, disliked, room, setDeck, setHistory, setHistoryByVibe, setLocalHistory],
   );
+
+  const setDeckIndex = (index: number) => {
+    setDeck(prev => (prev ? { ...prev, index } : prev));
+    if (room.code) room.pushIndex(index);
+  };
+
+  const chooseVibe = (next: VibeId) => {
+    if (getVibe(next).adult && !adultOk) {
+      setAgeGateOpen(true);
+      return;
+    }
+    setVibe(next);
+  };
+
+  const dislike = (q: Question) => {
+    setDisliked(prev => [...prev.filter(d => d.text !== q.text), q].slice(-MAX_DISLIKED));
+    setToast('Got it. Fewer like that.');
+  };
+
+  // Join a room from an invite link (?room=CODE), then tidy the URL.
+  const joinedFromLink = useRef(false);
+  useEffect(() => {
+    if (joinedFromLink.current) return;
+    joinedFromLink.current = true;
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('room');
+    if (!code) return;
+    window.history.replaceState(null, '', window.location.pathname);
+    room
+      .join(code)
+      .then(() => setToast('Joined the room'))
+      .catch(err => setToast(err instanceof Error ? err.message : "Couldn't join that room"));
+  }, [room]);
+
+  const shareInvite = async (url: string) => {
+    const text = 'Join me on Q&A Together';
+    try {
+      if (navigator.share) await navigator.share({ title: 'Q&A Together', text, url });
+      else {
+        await navigator.clipboard.writeText(url);
+        setToast('Invite link copied');
+      }
+    } catch (err) {
+      if ((err as Error)?.name !== 'AbortError') setToast("Couldn't share the link");
+    }
+  };
 
   const toggleSaved = (q: Question) => {
     const key = normalizeQuestion(q.text);
@@ -143,7 +218,9 @@ const App: React.FC = () => {
 
   const playSaved = () => {
     const shuffled = [...saved].sort(() => Math.random() - 0.5);
-    setDeck({ vibe: 'mix', questions: shuffled, index: 0, label: 'Saved' });
+    const next = { vibe: 'mix' as const, questions: shuffled, index: 0, label: 'Saved' };
+    setDeck(next);
+    if (room.code) room.pushDeck(next);
     setLayout('card');
     setView('play');
   };
@@ -173,6 +250,17 @@ const App: React.FC = () => {
           </button>
 
           <nav className="flex items-center gap-1" aria-label="Main">
+            {room.code && (
+              <button
+                type="button"
+                onClick={() => setRoomOpen(true)}
+                className="flex items-center gap-1.5 rounded-full bg-emerald-50 dark:bg-emerald-500/10 px-3 py-1.5 font-mono text-xs font-bold tracking-wider text-emerald-700 dark:text-emerald-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
+                aria-label={`In room ${room.code}. Open room options`}
+              >
+                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" aria-hidden />
+                {room.code}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setView(view === 'saved' ? (validDeck ? 'play' : 'home') : 'saved')}
@@ -184,7 +272,7 @@ const App: React.FC = () => {
               }`}
             >
               <BookHeart className="h-4 w-4" aria-hidden />
-              <span>Saved</span>
+              <span className="hidden sm:inline">Saved</span>
               {saved.length > 0 && (
                 <span className="rounded-full bg-rose-500 px-1.5 py-0.5 text-[11px] font-bold leading-none text-white tabular-nums">
                   {saved.length}
@@ -244,7 +332,7 @@ const App: React.FC = () => {
             )}
 
             <h2 className="mb-3 font-sans text-sm font-semibold text-slate-700 dark:text-slate-300">Choose a vibe</h2>
-            <VibePicker value={vibe} onChange={setVibe} />
+            <VibePicker value={vibe} onChange={chooseVibe} adultUnlocked={adultOk} />
 
             {error && (
               <div role="alert" className="mt-6 rounded-2xl border border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-500/10 p-4 text-sm text-red-700 dark:text-red-300">
@@ -257,6 +345,15 @@ const App: React.FC = () => {
                 {!isLoading && <Sparkles className="h-5 w-5" aria-hidden />}
                 Deal 20 {getVibe(vibe).label} questions
               </Button>
+              {!room.code && (
+                <button
+                  type="button"
+                  onClick={() => setRoomOpen(true)}
+                  className="mt-3 w-full rounded-full py-2 text-sm font-medium text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
+                >
+                  Partner has a room code? Join their room
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -294,6 +391,16 @@ const App: React.FC = () => {
                 </div>
                 <Button
                   variant="ghost"
+                  onClick={() => setRoomOpen(true)}
+                  className={`px-3! ${room.code ? 'text-emerald-600 dark:text-emerald-400' : ''}`}
+                  aria-label={room.code ? 'Room options' : 'Play on two phones'}
+                  title={room.code ? 'Room options' : 'Play on two phones'}
+                >
+                  <Users className="h-4 w-4" aria-hidden />
+                  <span className="hidden sm:inline">{room.code ? 'Room' : 'Together'}</span>
+                </Button>
+                <Button
+                  variant="ghost"
                   onClick={() => deal(validDeck?.label ? vibe : validDeck?.vibe ?? vibe)}
                   disabled={isLoading}
                   className="px-3!"
@@ -326,9 +433,10 @@ const App: React.FC = () => {
                 isSaved={isSaved}
                 answeredCount={deckAnsweredCount}
                 isLoading={isLoading}
-                onIndexChange={index => setDeck(prev => (prev ? { ...prev, index } : prev))}
+                onIndexChange={setDeckIndex}
                 onAnswered={q => setAnsweredFor(q, true)}
                 onToggleSaved={toggleSaved}
+                onDislike={dislike}
                 onShare={share}
                 onDealMore={() => deal(validDeck.label ? vibe : validDeck.vibe)}
                 onChangeVibe={() => setView('home')}
@@ -424,6 +532,8 @@ const App: React.FC = () => {
         savedCount={saved.length}
         onResetHistory={() => {
           setHistory([]);
+          setHistoryByVibe({});
+          setLocalHistory([]);
           setToast('Seen questions reset');
         }}
         onClearSaved={() => {
@@ -431,6 +541,53 @@ const App: React.FC = () => {
           setToast('Saved questions cleared');
         }}
         onInstall={install}
+        adultUnlocked={adultOk}
+        onLockAdult={() => {
+          setAdultOk(false);
+          if (vibe === 'spicy') setVibe(DEFAULT_VIBE);
+          setToast('Spicy is locked');
+        }}
+      />
+
+      <AgeGateDialog
+        open={ageGateOpen}
+        onClose={() => setAgeGateOpen(false)}
+        onConfirm={() => {
+          setAdultOk(true);
+          setVibe('spicy');
+          setAgeGateOpen(false);
+        }}
+      />
+
+      <RoomDialog
+        open={roomOpen}
+        onClose={() => setRoomOpen(false)}
+        code={room.code}
+        busy={room.busy}
+        canCreate={!!validDeck}
+        onCreate={async () => {
+          if (!validDeck) return;
+          try {
+            await room.create({ vibe: validDeck.vibe, questions: validDeck.questions, index: Math.min(validDeck.index, validDeck.questions.length), label: validDeck.label });
+            setView('play');
+          } catch (err) {
+            setToast(err instanceof Error ? err.message : "Couldn't start a room");
+          }
+        }}
+        onJoin={async code => {
+          try {
+            await room.join(code);
+            setRoomOpen(false);
+            setToast('Joined the room');
+          } catch (err) {
+            setToast(err instanceof Error ? err.message : "Couldn't join that room");
+          }
+        }}
+        onLeave={() => {
+          room.leave();
+          setToast('Left the room');
+        }}
+        onShare={shareInvite}
       />
 
       <Toast message={toast} onClose={clearToast} />

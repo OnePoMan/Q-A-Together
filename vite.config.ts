@@ -8,44 +8,48 @@ import { VitePWA } from 'vite-plugin-pwa';
 
 const MAX_DEV_BODY = 64 * 1024;
 
-/** Serves api/generate.ts during `npm run dev`, so local work doesn't need `vercel dev`. */
+const DEV_API_ROUTES = ['generate', 'room'];
+
+/** Serves the api/*.ts functions during `npm run dev`, so local work doesn't need `vercel dev`. */
 function devApi(): Plugin {
   return {
     name: 'qa-dev-api',
     apply: 'serve',
     configureServer(server) {
-      server.middlewares.use('/api/generate', async (req, res) => {
-        let size = 0;
-        const chunks: Buffer[] = [];
-        for await (const chunk of req) {
-          size += chunk.length;
-          if (size > MAX_DEV_BODY) {
-            res.statusCode = 413;
-            return res.end();
+      for (const route of DEV_API_ROUTES) {
+        server.middlewares.use(`/api/${route}`, async (req, res) => {
+          let size = 0;
+          const chunks: Buffer[] = [];
+          for await (const chunk of req) {
+            size += chunk.length;
+            if (size > MAX_DEV_BODY) {
+              res.statusCode = 413;
+              return res.end();
+            }
+            chunks.push(chunk);
           }
-          chunks.push(chunk);
-        }
-        const body = Buffer.concat(chunks).toString('utf8');
+          const body = Buffer.concat(chunks).toString('utf8');
 
-        const { default: handler } = await server.ssrLoadModule('/api/generate.ts');
-        const shim = {
-          status(code: number) {
-            res.statusCode = code;
-            return shim;
-          },
-          setHeader: (name: string, value: string) => res.setHeader(name, value),
-          json(payload: unknown) {
-            res.setHeader('Content-Type', 'application/json');
-            res.end(JSON.stringify(payload));
-          },
-        };
-        try {
-          await handler({ method: req.method, headers: req.headers, body: body || undefined }, shim);
-        } catch (error) {
-          server.config.logger.error(String(error));
-          if (!res.writableEnded) shim.status(500).json({ error: 'failed', message: 'Dev handler crashed.' });
-        }
-      });
+          const { default: handler } = await server.ssrLoadModule(`/api/${route}.ts`);
+          const shim = {
+            status(code: number) {
+              res.statusCode = code;
+              return shim;
+            },
+            setHeader: (name: string, value: string) => res.setHeader(name, value),
+            json(payload: unknown) {
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify(payload));
+            },
+          };
+          try {
+            await handler({ method: req.method, headers: req.headers, body: body || undefined }, shim);
+          } catch (error) {
+            server.config.logger.error(String(error));
+            if (!res.writableEnded) shim.status(500).json({ error: 'failed', message: 'Dev handler crashed.' });
+          }
+        });
+      }
     },
   };
 }
@@ -65,7 +69,17 @@ export default defineConfig(({ mode }) => {
   // Expose server-only settings from .env.local to the dev API handler. Nothing
   // here is passed to `define`, so secrets never reach the client bundle.
   const env = loadEnv(mode, process.cwd(), '');
-  for (const key of ['GEMINI_API_KEY', 'GEMINI_MODEL', 'GEMINI_FALLBACK_MODEL', 'GEMINI_THINKING_LEVEL', 'ALLOWED_ORIGINS']) {
+  for (const key of [
+    'GEMINI_API_KEY',
+    'GEMINI_MODEL',
+    'GEMINI_FALLBACK_MODEL',
+    'GEMINI_THINKING_LEVEL',
+    'ALLOWED_ORIGINS',
+    'DAILY_AI_LIMIT',
+    'PER_IP_DAILY_AI_LIMIT',
+    'KV_REST_API_URL',
+    'KV_REST_API_TOKEN',
+  ]) {
     if (env[key] !== undefined && process.env[key] === undefined) process.env[key] = env[key];
   }
 

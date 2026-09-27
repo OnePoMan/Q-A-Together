@@ -1,5 +1,7 @@
+import { isSingleAsk } from '../shared/singleAsk.js';
 import {
   DEFAULT_VIBE,
+  MAX_FEEDBACK_SENT,
   MAX_HISTORY_SENT,
   MAX_QUESTION_LENGTH,
   isVibeId,
@@ -11,6 +13,8 @@ import {
 export interface GenerateInput {
   vibe: VibeId;
   previouslyAsked: string[];
+  liked: string[];
+  disliked: string[];
 }
 
 // Control characters (including newlines) are stripped so user-supplied history
@@ -22,35 +26,41 @@ const cleanText = (value: string): string => value.replace(CONTROL_CHARS, ' ').r
 
 export class InputError extends Error {}
 
+/** Untrusted list of question strings -> cleaned, capped, safe to embed in a delimited prompt block. */
+function cleanList(value: unknown, field: string, max: number): string[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) throw new InputError(`${field} must be an array`);
+  return value
+    .slice(-max)
+    .filter((q): q is string => typeof q === 'string')
+    .map(q => cleanText(q).replace(/[<>]/g, '').slice(0, MAX_QUESTION_LENGTH))
+    .filter(q => q.length > 0);
+}
+
 export function parseGenerateInput(body: unknown): GenerateInput {
   if (body === undefined || body === null || body === '') {
-    return { vibe: DEFAULT_VIBE, previouslyAsked: [] };
+    return { vibe: DEFAULT_VIBE, previouslyAsked: [], liked: [], disliked: [] };
   }
   if (typeof body !== 'object' || Array.isArray(body)) {
     throw new InputError('Body must be a JSON object');
   }
 
-  const { vibe, previouslyAsked } = body as Record<string, unknown>;
-
+  const { vibe, previouslyAsked, liked, disliked } = body as Record<string, unknown>;
   if (vibe !== undefined && !isVibeId(vibe)) {
     throw new InputError('Unknown vibe');
   }
-  if (previouslyAsked !== undefined && !Array.isArray(previouslyAsked)) {
-    throw new InputError('previouslyAsked must be an array');
-  }
 
-  const history = ((previouslyAsked as unknown[] | undefined) ?? [])
-    .slice(-MAX_HISTORY_SENT)
-    .filter((q): q is string => typeof q === 'string')
-    .map(q => cleanText(q).replace(/[<>]/g, '').slice(0, MAX_QUESTION_LENGTH))
-    .filter(q => q.length > 0);
-
-  return { vibe: (vibe as VibeId | undefined) ?? DEFAULT_VIBE, previouslyAsked: history };
+  return {
+    vibe: (vibe as VibeId | undefined) ?? DEFAULT_VIBE,
+    previouslyAsked: cleanList(previouslyAsked, 'previouslyAsked', MAX_HISTORY_SENT),
+    liked: cleanList(liked, 'liked', MAX_FEEDBACK_SENT),
+    disliked: cleanList(disliked, 'disliked', MAX_FEEDBACK_SENT),
+  };
 }
 
 /**
- * Validates model output: keeps well-formed questions, drops duplicates (within the
- * batch and against history), and snaps unknown categories to a known one.
+ * Validates model output: keeps well-formed, single-ask questions, drops duplicates
+ * (within the batch and against history), and snaps unknown categories to a known one.
  */
 export function sanitizeQuestions(
   raw: unknown,
@@ -74,6 +84,7 @@ export function sanitizeQuestions(
 
     const text = cleanText(rawText);
     if (text.length < 12 || text.length > MAX_QUESTION_LENGTH) continue;
+    if (!isSingleAsk(text)) continue;
 
     const key = normalizeQuestion(text);
     if (!key || seen.has(key)) continue;

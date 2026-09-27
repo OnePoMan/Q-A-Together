@@ -7,11 +7,11 @@ import { VIBES, normalizeQuestion } from '../shared/vibes';
 
 describe('parseGenerateInput', () => {
   it('defaults when body is empty', () => {
-    expect(parseGenerateInput(undefined)).toEqual({ vibe: 'mix', previouslyAsked: [] });
+    expect(parseGenerateInput(undefined)).toEqual({ vibe: 'mix', previouslyAsked: [], liked: [], disliked: [] });
   });
 
   it('rejects unknown vibes and non-array history', () => {
-    expect(() => parseGenerateInput({ vibe: 'spicy' })).toThrow(InputError);
+    expect(() => parseGenerateInput({ vibe: 'unknown-vibe' })).toThrow(InputError);
     expect(() => parseGenerateInput({ previouslyAsked: 'nope' })).toThrow(InputError);
     expect(() => parseGenerateInput([1, 2])).toThrow(InputError);
   });
@@ -154,9 +154,11 @@ describe('handler', () => {
   };
   const base = { host: 'app.example', origin: 'https://app.example', 'content-type': 'application/json' };
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.resetModules();
     process.env.GEMINI_API_KEY = 'test-key';
+    const { setStore, MemoryStore } = await import('../server/store');
+    setStore(new MemoryStore());
   });
   afterEach(() => {
     delete process.env.GEMINI_API_KEY;
@@ -206,7 +208,7 @@ describe('handler', () => {
     expect(JSON.stringify(res.body)).not.toContain('AIza');
   });
 
-  it('rate limits a single client', async () => {
+  it('rate limits bursts from a single client', async () => {
     const generateRaw = vi.fn().mockResolvedValue({ model: 'm', data: [] });
     vi.doMock('../server/gemini.js', async importOriginal => ({
       ...(await importOriginal<typeof import('../server/gemini')>()),
@@ -219,6 +221,8 @@ describe('handler', () => {
       await handler({ method: 'POST', headers: { ...base, 'x-real-ip': '3.3.3.3' }, body: {} }, res);
       codes.push(res.statusCode);
     }
-    expect(codes.filter(c => c === 429)).toHaveLength(2);
+    // 5 AI attempts (bad output, empty bank), then the per-IP daily cap, then the burst limiter.
+    expect(generateRaw).toHaveBeenCalledTimes(5);
+    expect(codes.slice(5).every(c => c === 429)).toBe(true);
   });
 });

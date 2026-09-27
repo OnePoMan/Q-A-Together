@@ -1,18 +1,21 @@
 import React from 'react';
+import { Lock } from 'lucide-react';
 import { VIBES, type VibeId } from '../shared/vibes';
 import { VIBE_STYLES } from './vibeMeta';
 
 interface VibePickerProps {
   value: VibeId;
   onChange: (vibe: VibeId) => void;
+  adultUnlocked: boolean;
 }
 
-export const VibePicker: React.FC<VibePickerProps> = ({ value, onChange }) => (
-  <div role="radiogroup" aria-label="Choose a vibe" className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+export const VibePicker: React.FC<VibePickerProps> = ({ value, onChange, adultUnlocked }) => (
+  <div role="radiogroup" aria-label="Choose a vibe" className="grid grid-cols-2 sm:grid-cols-4 gap-3">
     {VIBES.map(vibe => {
       const style = VIBE_STYLES[vibe.id];
       const Icon = style.icon;
       const selected = vibe.id === value;
+      const locked = vibe.adult && !adultUnlocked;
       return (
         <button
           key={vibe.id}
@@ -29,6 +32,12 @@ export const VibePicker: React.FC<VibePickerProps> = ({ value, onChange }) => (
           <span className={`inline-flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl ${style.tile}`}>
             <Icon className="h-5 w-5" aria-hidden />
           </span>
+          {vibe.adult && (
+            <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-slate-900/85 dark:bg-white/90 px-2 py-0.5 text-[10px] font-bold text-white dark:text-slate-900">
+              {locked && <Lock className="h-2.5 w-2.5" aria-hidden />}
+              18+
+            </span>
+          )}
           <span>
             <span className="block font-semibold text-slate-900 dark:text-slate-100">{vibe.label}</span>
             <span className="block text-xs leading-snug text-slate-500 dark:text-slate-400 mt-0.5">{vibe.tagline}</span>

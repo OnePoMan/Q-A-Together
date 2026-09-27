@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Download, Monitor, Moon, RotateCcw, Sun, Trash, X } from 'lucide-react';
+import { Download, Lock, Monitor, Moon, RotateCcw, Sun, Trash, X } from 'lucide-react';
 import type { ThemePreference } from '../hooks/useTheme';
 
 interface SettingsDialogProps {
@@ -14,6 +14,8 @@ interface SettingsDialogProps {
   onResetHistory: () => void;
   onClearSaved: () => void;
   onInstall: (() => Promise<void>) | null;
+  adultUnlocked: boolean;
+  onLockAdult: () => void;
 }
 
 const THEMES: { id: ThemePreference; label: string; icon: typeof Sun }[] = [
@@ -37,6 +39,8 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({
   onResetHistory,
   onClearSaved,
   onInstall,
+  adultUnlocked,
+  onLockAdult,
 }) => {
   const ref = useRef<HTMLDialogElement>(null);
 
@@ -130,6 +134,16 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({
               Install app on this device
             </button>
           )}
+          {adultUnlocked && (
+            <button
+              type="button"
+              onClick={onLockAdult}
+              className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
+            >
+              <Lock className="h-4 w-4" aria-hidden />
+              Lock the 18+ Spicy vibe
+            </button>
+          )}
           <button
             type="button"
             onClick={() => {
@@ -157,7 +171,7 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({
         </div>
 
         <p className="mt-6 text-center text-xs text-slate-400 dark:text-slate-500">
-          Names, saves and history stay on this device. To avoid repeats, recently seen questions are sent with each request to the question generator (Google Gemini).
+          Names, saves and history stay on this device. To avoid repeats and match your taste, recently seen, saved and skipped questions are sent with each request to the question generator (Google Gemini). 18+ cards never leave the device except to sync a room you start.
         </p>
       </div>
     </dialog>

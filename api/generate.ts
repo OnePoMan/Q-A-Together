@@ -1,124 +1,95 @@
-import { BATCH_SIZE } from '../shared/vibes.js';
+import { BANK_EXTRA, BATCH_SIZE, type Question } from '../shared/vibes.js';
 import { buildPrompt } from '../server/prompt.js';
-import { InputError, parseGenerateInput, sanitizeQuestions } from '../server/validate.js';
+import { InputError, parseGenerateInput, sanitizeQuestions, type GenerateInput } from '../server/validate.js';
 import { RateLimiter } from '../server/rateLimit.js';
 import { UpstreamError, generateRaw } from '../server/gemini.js';
+import { HttpError, clientIp, fail, readJsonPost, sendError, type ApiRequest, type ApiResponse } from '../server/http.js';
+import { getStore, type Store } from '../server/store.js';
+import { addToBank, drawFromBank, reserveAiCall } from '../server/quota.js';
 
-// Minimal request/response shapes shared by Vercel's Node runtime and the Vite dev
-// middleware (see vite.config.ts), so we don't need @vercel/node at runtime.
-export interface ApiRequest {
-  method?: string;
-  headers: Record<string, string | string[] | undefined>;
-  body?: unknown;
-}
-export interface ApiResponse {
-  status(code: number): ApiResponse;
-  setHeader(name: string, value: string): unknown;
-  json(body: unknown): unknown;
-}
+export type { ApiRequest, ApiResponse };
 
-const MAX_BODY_BYTES = 32 * 1024;
 const MIN_QUESTIONS = 8;
 
-const limiter = new RateLimiter(8, 10 * 60 * 1000);
+// First line of defence is the Vercel Firewall rule on /api/generate. This
+// per-instance limiter only catches bursts that reach one warm instance.
+const burstLimiter = new RateLimiter(8, 10 * 60 * 1000);
 
-const header = (req: ApiRequest, name: string): string | undefined => {
-  const value = req.headers[name];
-  return Array.isArray(value) ? value[0] : value;
-};
+type Source = 'ai' | 'bank';
 
-const clientIp = (req: ApiRequest): string =>
-  header(req, 'x-real-ip') || header(req, 'x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+const NOTICES = {
+  daily_budget: "Today's fresh AI questions are used up. Dealing from the question bank until midnight Pacific.",
+  ip_daily: "You've had a lot of fresh decks today. Dealing from the question bank for now.",
+  upstream: 'The AI is busy right now. Dealing from the question bank instead.',
+} as const;
 
-/**
- * Browsers always send Origin on POST. Requiring it to match this deployment (or
- * ALLOWED_ORIGINS) stops other sites from spending your quota through visitors'
- * browsers, and turns away the laziest scripted abuse. It is not authentication.
- */
-function isAllowedOrigin(req: ApiRequest): boolean {
-  const origin = header(req, 'origin');
-  if (!origin) return false;
-
-  const allowed = (process.env.ALLOWED_ORIGINS ?? '')
-    .split(',')
-    .map(o => o.trim())
-    .filter(Boolean);
-  if (allowed.includes(origin)) return true;
-
-  const host = header(req, 'host');
-  if (!host) return false;
-  try {
-    return new URL(origin).host === host;
-  } catch {
-    return false;
-  }
+async function serveFromBank(
+  res: ApiResponse,
+  store: Store,
+  input: GenerateInput,
+  notice: string,
+  fallback: HttpError,
+) {
+  const questions = await drawFromBank(store, input.vibe, input.previouslyAsked, BATCH_SIZE).catch(() => []);
+  if (questions.length === 0) return sendError(res, fallback);
+  return res.status(200).json({ questions, vibe: input.vibe, source: 'bank' satisfies Source, notice });
 }
 
-const fail = (res: ApiResponse, status: number, error: string, message: string) =>
-  res.status(status).json({ error, message });
-
 export default async function handler(req: ApiRequest, res: ApiResponse) {
-  res.setHeader('Cache-Control', 'no-store');
-
-  if (req.method !== 'POST') {
-    res.setHeader('Allow', 'POST');
-    return fail(res, 405, 'method_not_allowed', 'Use POST.');
-  }
-  if (!isAllowedOrigin(req)) {
-    return fail(res, 403, 'forbidden', 'Requests must come from the app.');
-  }
-  if (!header(req, 'content-type')?.toLowerCase().startsWith('application/json')) {
-    return fail(res, 415, 'unsupported_media_type', 'Send JSON.');
+  let input: GenerateInput;
+  try {
+    const body = readJsonPost(req, res);
+    input = parseGenerateInput(body);
+  } catch (error) {
+    if (error instanceof HttpError) return sendError(res, error);
+    if (error instanceof InputError) return fail(res, 400, 'bad_request', error.message);
+    throw error;
   }
 
-  const retryAfter = limiter.check(clientIp(req));
+  const ip = clientIp(req);
+  const retryAfter = burstLimiter.check(ip);
   if (retryAfter > 0) {
-    res.setHeader('Retry-After', String(retryAfter));
-    return fail(res, 429, 'rate_limited', `Slow down a little. Try again in ${retryAfter}s.`);
+    return sendError(res, new HttpError(429, 'rate_limited', `Slow down a little. Try again in ${retryAfter}s.`), retryAfter);
   }
 
+  const store = getStore();
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     console.error('[generate] GEMINI_API_KEY is not set');
     return fail(res, 503, 'not_configured', 'The question generator is not configured yet.');
   }
 
-  let body = req.body;
-  if (typeof body === 'string') {
-    if (body.length > MAX_BODY_BYTES) return fail(res, 413, 'too_large', 'Request too large.');
-    try {
-      body = JSON.parse(body);
-    } catch {
-      return fail(res, 400, 'bad_request', 'Invalid JSON.');
-    }
-  } else if (JSON.stringify(body ?? null).length > MAX_BODY_BYTES) {
-    return fail(res, 413, 'too_large', 'Request too large.');
+  const quota = await reserveAiCall(store, ip).catch(error => {
+    // Fail open: Gemini's own quota is still the hard stop.
+    console.error('[generate] quota check failed:', error);
+    return { ok: true } as const;
+  });
+  if (!quota.ok) {
+    return serveFromBank(res, store, input, NOTICES[quota.reason], new HttpError(429, quota.reason, NOTICES[quota.reason].split('.')[0] + '.'));
   }
 
-  let input;
-  try {
-    input = parseGenerateInput(body);
-  } catch (error) {
-    if (error instanceof InputError) return fail(res, 400, 'bad_request', error.message);
-    throw error;
-  }
+  const count = BATCH_SIZE + BANK_EXTRA;
+  const { system, user, categories } = buildPrompt(input.vibe, input.previouslyAsked, count, Math.random, input);
 
-  const { system, user, categories } = buildPrompt(input.vibe, input.previouslyAsked, BATCH_SIZE);
-
+  let questions: Question[];
   try {
     const { data, model } = await generateRaw({ apiKey, system, prompt: user, categories });
-    const questions = sanitizeQuestions(data, categories, input.previouslyAsked, BATCH_SIZE);
-
+    questions = sanitizeQuestions(data, categories, input.previouslyAsked, count);
     if (questions.length < MIN_QUESTIONS) {
       console.error(`[generate] ${model} returned only ${questions.length} usable questions`);
-      return fail(res, 502, 'bad_output', 'The AI had an off moment. Try again.');
+      return serveFromBank(res, store, input, NOTICES.upstream, new HttpError(502, 'bad_output', 'The AI had an off moment. Try again.'));
     }
-    return res.status(200).json({ questions, vibe: input.vibe });
   } catch (error) {
     // Details stay in the server logs; clients only get a stable code.
     console.error('[generate] failed:', error);
     const status = error instanceof UpstreamError ? error.status : undefined;
-    if (status === 429) return fail(res, 503, 'upstream_busy', 'The AI is busy right now. Try again in a minute.');
-    return fail(res, 502, 'upstream_error', "Couldn't reach the AI. Try again shortly.");
+    const fallback =
+      status === 429
+        ? new HttpError(503, 'upstream_busy', 'The AI is busy right now. Try again in a minute.')
+        : new HttpError(502, 'upstream_error', "Couldn't reach the AI. Try again shortly.");
+    return serveFromBank(res, store, input, NOTICES.upstream, fallback);
   }
+
+  await addToBank(store, input.vibe, questions).catch(error => console.error('[generate] bank write failed:', error));
+  return res.status(200).json({ questions: questions.slice(0, BATCH_SIZE), vibe: input.vibe, source: 'ai' satisfies Source });
 }

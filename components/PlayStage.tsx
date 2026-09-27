@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Heart, Layers, Share2, Sparkles } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Heart, Layers, Share2, Sparkles, ThumbsDown } from 'lucide-react';
 import type { Question, VibeId } from '../shared/vibes';
 import { getVibe } from '../shared/vibes';
 import { VIBE_STYLES } from './vibeMeta';
@@ -17,6 +17,7 @@ interface PlayStageProps {
   onIndexChange: (index: number) => void;
   onAnswered: (q: Question) => void;
   onToggleSaved: (q: Question) => void;
+  onDislike: (q: Question) => void;
   onShare: (q: Question) => void;
   onDealMore: () => void;
   onChangeVibe: () => void;
@@ -39,6 +40,7 @@ export const PlayStage: React.FC<PlayStageProps> = ({
   onIndexChange,
   onAnswered,
   onToggleSaved,
+  onDislike,
   onShare,
   onDealMore,
   onChangeVibe,
@@ -57,6 +59,13 @@ export const PlayStage: React.FC<PlayStageProps> = ({
     if (atEnd) return;
     tapLight();
     if (current) onAnswered(current);
+    setDirection('next');
+    onIndexChange(index + 1);
+  };
+  const skipDisliked = () => {
+    if (!current) return;
+    tapLight();
+    onDislike(current);
     setDirection('next');
     onIndexChange(index + 1);
   };
@@ -237,6 +246,15 @@ export const PlayStage: React.FC<PlayStageProps> = ({
             </button>
             <button
               type="button"
+              onClick={skipDisliked}
+              aria-label="Not for us: skip and show fewer like this"
+              title="Not for us"
+              className="inline-flex h-12 w-12 items-center justify-center rounded-full text-slate-400 dark:text-slate-500 transition hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-600 dark:hover:text-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
+            >
+              <ThumbsDown className="h-5 w-5" aria-hidden />
+            </button>
+            <button
+              type="button"
               onClick={() => onShare(current)}
               aria-label="Share question"
               className="inline-flex h-12 w-12 items-center justify-center rounded-full text-slate-400 dark:text-slate-500 transition hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-600 dark:hover:text-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
@@ -257,9 +275,9 @@ export const PlayStage: React.FC<PlayStageProps> = ({
       </div>
 
       <p className="mt-6 text-center text-xs text-slate-400 dark:text-slate-500 hidden sm:block">
-        Tip: use ← → to move and S to save
+        Tip: use ← → to move and S to save. Hearts and thumbs-downs shape future decks.
       </p>
-      <p className="mt-6 text-center text-xs text-slate-400 dark:text-slate-500 sm:hidden">Swipe the card to move</p>
+      <p className="mt-6 text-center text-xs text-slate-400 dark:text-slate-500 sm:hidden">Swipe the card to move. Hearts and thumbs-downs shape future decks.</p>
     </section>
   );
 };
