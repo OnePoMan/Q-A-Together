@@ -15,6 +15,9 @@ export const DATA_KEYS = [
   'qa-theme',
   'qa-vibe',
   'qa-layout',
+  'qa-display',
+  'qa-timer-on',
+  'qa-timer-seconds',
   'qa-cache-v2',
 ] as const;
 // Deliberately not transferred: qa-adult-ok (the 18+ check is asked again).

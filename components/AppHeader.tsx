@@ -46,6 +46,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({ view, onNavigate, roomCode
           type="button"
           onClick={() => onNavigate(view === 'saved' ? (hasDeck ? 'play' : 'home') : 'saved')}
           aria-current={view === 'saved' ? 'page' : undefined}
+          aria-label={savedCount > 0 ? `Saved (${savedCount})` : 'Saved'}
           className={`flex items-center gap-2 rounded-full px-3.5 py-2 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 ${
             view === 'saved'
               ? 'bg-rose-100 dark:bg-rose-500/15 text-rose-700 dark:text-rose-200'
