@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { displayNames } from '../shared/brand';
 import { BookOpen, Pencil } from 'lucide-react';
 import { Button } from './Button';
+import { SearchField } from './SearchField';
 import type { Journal, JournalEntry } from '../lib/journal';
 
 interface MemoriesViewProps {
@@ -14,7 +15,12 @@ interface MemoriesViewProps {
 const dateFormat = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 
 export const MemoriesView: React.FC<MemoriesViewProps> = ({ journal, names, onEdit, onFindQuestions }) => {
+  const [query, setQuery] = useState('');
   const entries = Object.values(journal).sort((a, b) => b.updatedAt - a.updatedAt);
+  const needle = query.trim().toLowerCase();
+  const visible = needle
+    ? entries.filter(e => [e.question.text, e.question.category, ...e.answers].some(s => (s ?? '').toLowerCase().includes(needle)))
+    : entries;
   const labels = displayNames(names);
 
   return (
@@ -40,8 +46,18 @@ export const MemoriesView: React.FC<MemoriesViewProps> = ({ journal, names, onEd
           <Button onClick={onFindQuestions}>Find questions</Button>
         </div>
       ) : (
+        <>
+          <div className="mb-6">
+            <SearchField value={query} onChange={setQuery} label="Search memories" placeholder="Search memories" />
+          </div>
+          {visible.length === 0 ? (
+            <div className="rounded-3xl border border-dashed border-slate-300 dark:border-slate-700 bg-white/60 dark:bg-slate-900/40 px-6 py-12 text-center">
+              <h2 className="mb-4 text-lg font-semibold">No memories match</h2>
+              <Button onClick={() => setQuery('')}>Clear search</Button>
+            </div>
+          ) : (
         <ol className="relative space-y-5 border-l-2 border-rose-100 dark:border-slate-800 pl-6">
-          {entries.map((entry, i) => (
+          {visible.map((entry, i) => (
             <li key={entry.question.text} className="relative animate-fade-in-up" style={{ animationDelay: `${Math.min(i, 10) * 40}ms` }}>
               <span aria-hidden className="absolute -left-[33px] top-6 h-4 w-4 rounded-full border-4 border-slate-50 dark:border-slate-950 bg-rose-400" />
               <article className="rounded-3xl border border-slate-200/70 dark:border-slate-700/60 bg-white dark:bg-slate-800/70 p-6 shadow-sm">
@@ -73,6 +89,8 @@ export const MemoriesView: React.FC<MemoriesViewProps> = ({ journal, names, onEd
             </li>
           ))}
         </ol>
+          )}
+        </>
       )}
     </div>
   );
