@@ -2,7 +2,7 @@
 // per-address, so the old site packs it into a link's #fragment (never sent to
 // any server) and the new site unpacks it after the user confirms.
 
-const KEYS = [
+export const DATA_KEYS = [
   'qa-saved',
   'qa-favorites',
   'qa-journal',
@@ -15,6 +15,9 @@ const KEYS = [
   'qa-theme',
   'qa-vibe',
   'qa-layout',
+  'qa-display',
+  'qa-timer-on',
+  'qa-timer-seconds',
   'qa-cache-v2',
 ] as const;
 // Deliberately not transferred: qa-adult-ok (the 18+ check is asked again).
@@ -36,7 +39,7 @@ const fromBase64Url = (encoded: string) => {
 
 export function buildTransferLink(targetUrl: string): string {
   const data: Record<string, string> = {};
-  for (const key of KEYS) {
+  for (const key of DATA_KEYS) {
     try {
       const value = localStorage.getItem(key);
       if (value !== null) data[key] = value;
@@ -47,9 +50,23 @@ export function buildTransferLink(targetUrl: string): string {
   return `${targetUrl}/${PREFIX}${toBase64Url(JSON.stringify({ v: 1, data }))}`;
 }
 
-const isPlainObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+export const isPlainObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
-function merge(existing: unknown, incoming: unknown): unknown {
+const isNamePair = (v: unknown): v is [string, string] =>
+  Array.isArray(v) && v.length >= 2 && typeof v[0] === 'string' && typeof v[1] === 'string';
+
+/** Partner names are a fixed pair: keep each name already set here, fill blank slots from the incoming pair. */
+function mergeNames(existing: unknown, incoming: unknown): unknown {
+  if (!isNamePair(incoming)) return existing;
+  if (!isNamePair(existing)) return incoming.slice(0, 2);
+  return [0, 1].map(i => (existing[i].trim() ? existing[i] : incoming[i]));
+}
+
+/** Per-key merge: names are a pair, everything else uses the generic merge. */
+export const mergeKey = (key: string, existing: unknown, incoming: unknown): unknown =>
+  key === 'qa-names' ? mergeNames(existing, incoming) : merge(existing, incoming);
+
+export function merge(existing: unknown, incoming: unknown): unknown {
   if (Array.isArray(existing) && Array.isArray(incoming)) {
     const seen = new Set(existing.map(item => JSON.stringify(item)));
     return [...existing, ...incoming.filter(item => !seen.has(JSON.stringify(item)))];
@@ -78,13 +95,13 @@ export function importFromLocation(): boolean {
   if (!isPlainObject(payload) || payload.v !== 1 || !isPlainObject(payload.data)) return false;
   if (!window.confirm('Bring over your saved questions, memories and settings from the old address?')) return false;
 
-  for (const key of KEYS) {
+  for (const key of DATA_KEYS) {
     const raw = payload.data[key];
     if (typeof raw !== 'string') continue;
     try {
       const incoming = JSON.parse(raw);
       const current = localStorage.getItem(key);
-      const value = current === null ? incoming : merge(JSON.parse(current), incoming);
+      const value = current === null ? incoming : mergeKey(key, JSON.parse(current), incoming);
       localStorage.setItem(key, JSON.stringify(value));
     } catch {
       // skip malformed entry

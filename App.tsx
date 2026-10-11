@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, BookHeart, BookOpen, Heart, LayoutGrid, Layers, Play, Settings, Shuffle, Sparkles, Users } from 'lucide-react';
+import { ArrowLeft, LayoutGrid, Layers, Play, Shuffle, Sparkles, Users } from 'lucide-react';
 import { buildDeck } from './services/questionService';
+import { AppHeader } from './components/AppHeader';
 import { AgeGateDialog } from './components/AgeGateDialog';
 import { CooldownNotice } from './components/CooldownNotice';
 import { JournalDialog } from './components/JournalDialog';
@@ -14,7 +15,9 @@ import { OfflineBanner } from './components/OfflineBanner';
 import { PlayStage } from './components/PlayStage';
 import { QuestionCard } from './components/QuestionCard';
 import { RoomDialog } from './components/RoomDialog';
+import { SavedView } from './components/SavedView';
 import { SettingsDialog } from './components/SettingsDialog';
+import { TimerRow } from './components/TimerRow';
 import { Toast } from './components/Toast';
 import { VibePicker } from './components/VibePicker';
 import { VIBE_STYLES } from './components/vibeMeta';
@@ -28,6 +31,7 @@ import { useWakeLock } from './hooks/useWakeLock';
 import { MAX_JOURNAL_ENTRIES, hasAnswers, type Journal } from './lib/journal';
 import { APP_NAME, APP_URL } from './shared/brand';
 import { readJson } from './lib/storage';
+import { shuffle } from './lib/shuffle';
 import { DEFAULT_VIBE, getVibe, isVibeId, normalizeQuestion, type Question, type VibeId } from './shared/vibes';
 import type { PlayLayout, View } from './types';
 import { tapMedium, tapShort } from './utils/haptics';
@@ -238,9 +242,9 @@ const App: React.FC = () => {
     }
   };
 
-  const playSaved = () => {
-    const shuffled = [...saved].sort(() => Math.random() - 0.5);
-    const next = { vibe: 'mix' as const, questions: shuffled, index: 0, label: 'Saved' };
+  const playSaved = (questions: Question[]) => {
+    if (questions.length === 0) return;
+    const next = { vibe: 'mix' as const, questions: shuffle(questions), index: 0, label: 'Saved' };
     setDeck(next);
     if (room.code) room.pushDeck(next);
     setLayout('card');
@@ -297,80 +301,18 @@ const App: React.FC = () => {
         Skip to content
       </a>
 
-      <header className="sticky top-0 z-50 border-b border-rose-100/60 dark:border-slate-800/80 bg-white/75 dark:bg-slate-950/75 backdrop-blur-lg pt-[env(safe-area-inset-top)]">
-        <div className="mx-auto flex h-16 phone:h-14 max-w-6xl items-center justify-between px-4 sm:px-6">
-          <button
-            type="button"
-            onClick={() => setView('home')}
-            className="flex items-center gap-2 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
-          >
-            <span className="inline-flex h-8 w-8 phone:h-7 phone:w-7 items-center justify-center rounded-xl bg-rose-500 text-white shadow-md shadow-rose-500/30">
-              <Heart className="h-4 w-4 fill-white" aria-hidden />
-            </span>
-            <span className="flex flex-col text-left leading-none">
-              <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-rose-500">Q&amp;A with</span>
-              <span className="whitespace-nowrap font-serif text-lg sm:text-xl phone:text-base max-[360px]:text-sm font-semibold">Ethan &amp; Brianna</span>
-            </span>
-          </button>
-
-          <nav className="flex items-center gap-1" aria-label="Main">
-            {room.code && (
-              <button
-                type="button"
-                onClick={() => setRoomOpen(true)}
-                className="flex items-center gap-1.5 rounded-full bg-emerald-50 dark:bg-emerald-500/10 px-3 py-1.5 font-mono text-xs font-bold tracking-wider text-emerald-700 dark:text-emerald-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
-                aria-label={`In room ${room.code}. Open room options`}
-              >
-                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" aria-hidden />
-                {room.code}
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => setView(view === 'saved' ? (validDeck ? 'play' : 'home') : 'saved')}
-              aria-current={view === 'saved' ? 'page' : undefined}
-              className={`flex items-center gap-2 rounded-full px-3.5 py-2 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 ${
-                view === 'saved'
-                  ? 'bg-rose-100 dark:bg-rose-500/15 text-rose-700 dark:text-rose-200'
-                  : 'text-slate-600 dark:text-slate-300 hover:bg-rose-50 dark:hover:bg-slate-800'
-              }`}
-            >
-              <BookHeart className="h-4 w-4" aria-hidden />
-              <span className="hidden sm:inline">Saved</span>
-              {saved.length > 0 && (
-                <span className="rounded-full bg-rose-500 px-1.5 py-0.5 text-[11px] font-bold leading-none text-white tabular-nums">
-                  {saved.length}
-                </span>
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={() => setView(view === 'memories' ? (validDeck ? 'play' : 'home') : 'memories')}
-              aria-current={view === 'memories' ? 'page' : undefined}
-              aria-label="Memories"
-              className={`flex items-center gap-2 rounded-full px-3 py-2 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 ${
-                view === 'memories'
-                  ? 'bg-rose-100 dark:bg-rose-500/15 text-rose-700 dark:text-rose-200'
-                  : 'text-slate-600 dark:text-slate-300 hover:bg-rose-50 dark:hover:bg-slate-800'
-              }`}
-            >
-              <BookOpen className="h-4 w-4" aria-hidden />
-              <span className="hidden sm:inline">Memories</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                tapShort();
-                setSettingsOpen(true);
-              }}
-              aria-label="Settings"
-              className="rounded-full p-2.5 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
-            >
-              <Settings className="h-5 w-5" aria-hidden />
-            </button>
-          </nav>
-        </div>
-      </header>
+      <AppHeader
+        view={view}
+        onNavigate={setView}
+        roomCode={room.code}
+        onOpenRoom={() => setRoomOpen(true)}
+        savedCount={saved.length}
+        hasDeck={!!validDeck}
+        onOpenSettings={() => {
+          tapShort();
+          setSettingsOpen(true);
+        }}
+      />
 
       <MoveBanner />
       {!isOnline && <OfflineBanner />}
@@ -437,6 +379,7 @@ const App: React.FC = () => {
                   : 'sticky bottom-0 z-10 -mx-4 mt-6 bg-linear-to-t from-slate-50 via-slate-50/90 to-transparent px-4 pt-6 pb-[calc(1rem+env(safe-area-inset-bottom))] dark:from-slate-950 dark:via-slate-950/90 sm:static sm:mx-0 sm:bg-none sm:p-0 sm:pt-2'
               }
             >
+              <TimerRow />
               <Button size="lg" onClick={() => deal()} isLoading={isLoading} className="w-full">
                 {!isLoading && <Sparkles className="h-5 w-5" aria-hidden />}
                 Deal 20 {getVibe(vibe).label} questions
@@ -576,52 +519,17 @@ const App: React.FC = () => {
         )}
 
         {view === 'saved' && (
-          <div>
-            <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <h1 className="font-serif text-3xl sm:text-4xl font-semibold">Saved questions</h1>
-                <p className="mt-1 text-slate-600 dark:text-slate-400">
-                  {saved.length ? `${saved.length} favorite${saved.length === 1 ? '' : 's'} to come back to.` : 'Your favorites will live here.'}
-                </p>
-              </div>
-              {saved.length > 0 && (
-                <Button onClick={playSaved} className="self-start sm:self-auto">
-                  <Play className="h-4 w-4" aria-hidden />
-                  Play these
-                </Button>
-              )}
-            </div>
-
-            {saved.length > 0 ? (
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {[...saved].reverse().map((q, i) => (
-                  <QuestionCard
-                    key={q.text}
-                    question={q}
-                    index={i}
-                    isSaved
-                    isAnswered={!!answered[q.text]}
-                    onToggleSaved={() => toggleSaved(q)}
-                    onToggleAnswered={() => setAnsweredFor(q, !answered[q.text])}
-                    onShare={() => share(q)}
-                    onOpenJournal={() => setJournalTarget(q)}
-                    hasJournal={hasJournal(q)}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="rounded-3xl border border-dashed border-slate-300 dark:border-slate-700 bg-white/60 dark:bg-slate-900/40 px-6 py-16 text-center">
-                <span className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-50 dark:bg-rose-500/10">
-                  <Heart className="h-7 w-7 text-rose-300 dark:text-rose-400/60" aria-hidden />
-                </span>
-                <h2 className="mb-1 text-lg font-semibold">Nothing saved yet</h2>
-                <p className="mx-auto mb-6 max-w-xs text-slate-500 dark:text-slate-400">
-                  Tap the heart on any question to keep it for another night.
-                </p>
-                <Button onClick={() => setView(validDeck ? 'play' : 'home')}>Find questions</Button>
-              </div>
-            )}
-          </div>
+          <SavedView
+            saved={saved}
+            answered={answered}
+            onPlay={playSaved}
+            onToggleSaved={toggleSaved}
+            onToggleAnswered={(q, value) => setAnsweredFor(q, value)}
+            onShare={share}
+            onOpenJournal={setJournalTarget}
+            hasJournal={hasJournal}
+            onFindQuestions={() => setView(validDeck ? 'play' : 'home')}
+          />
         )}
         {view === 'memories' && (
           <MemoriesView

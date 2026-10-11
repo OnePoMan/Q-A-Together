@@ -15,9 +15,11 @@ Conversation-starter questions for couples. Pick a vibe and get 20 fresh questio
 - **Share as image:** any question can be shared as a 4:5 card image, or as plain text
 - **Stays awake:** the screen won't dim while a deck is open (Screen Wake Lock, where supported)
 - **Phone layout:** on phones the play screen is exactly one screen tall: the card stretches to fill it and the controls sit at the bottom. The home screen switches to compact vibe rows. Desktop keeps the classic layout. **Settings → Layout** switches between Auto (the default), Phone and Desktop. Sideways phones scroll normally.
+- **Answer timer:** per-card countdown (10/15/30/60 seconds), on by default; switch it on or off and pick the length on the home screen before dealing, or from the card header while playing; it pauses while the tab is hidden, buzzes at zero and never auto-advances. The progress bar is hidden with reduced motion, leaving just the number
 - **Card motion:** decks deal onto the table, cards flip in, tilt as you drag and fly off when swiped (all disabled with reduced motion)
 - **Friendly rate limiting:** if the firewall limit is hit, the app deals saved questions and shows a live countdown until fresh ones are available
 - **Works offline:** installable PWA with a built-in starter deck plus a cache of previously generated questions
+- **Backup & restore:** Settings → Backup downloads your saved questions, memories and settings as a JSON file, and merges them back from one later
 - **Private by default:** names, saved questions and history stay in the browser's local storage
 
 ## Architecture
