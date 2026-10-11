@@ -93,7 +93,7 @@ export const PlayStage: React.FC<PlayStageProps> = ({
   const timeUp = timerOn && !!current && done;
   useEffect(() => {
     if (timeUp) tapLong();
-  }, [timeUp, index]);
+  }, [timeUp]);
 
   /** Throws the current card off-screen, then moves to the next or previous one. */
   const leave = (dir: 'next' | 'prev', then: () => void) => {
