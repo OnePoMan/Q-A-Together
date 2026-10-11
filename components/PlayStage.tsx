@@ -1,11 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { displayNames } from '../shared/brand';
-import { ChevronLeft, ChevronRight, Heart, Layers, NotebookPen, Share2, Sparkles, ThumbsDown } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Heart, Layers, NotebookPen, Share2, Sparkles, ThumbsDown, Timer } from 'lucide-react';
 import type { Question, VibeId } from '../shared/vibes';
 import { getVibe } from '../shared/vibes';
 import { VIBE_STYLES } from './vibeMeta';
 import { Button } from './Button';
-import { tapDouble, tapLight } from '../utils/haptics';
+import { tapDouble, tapLight, tapLong } from '../utils/haptics';
+import { useLocalStorage } from '../hooks/useLocalStorage';
+import { useCountdown } from '../hooks/useCountdown';
+import { nextTimerSeconds } from '../lib/countdown';
 
 interface PlayStageProps {
   questions: Question[];
@@ -77,10 +80,20 @@ export const PlayStage: React.FC<PlayStageProps> = ({
   }, [deckKey]);
   const drag = useRef<{ x: number; y: number; id: number; horizontal: boolean | null } | null>(null);
 
+  const [timerOn, setTimerOn] = useLocalStorage<boolean>('qa-timer-on', false);
+  const [timerSeconds, setTimerSeconds] = useLocalStorage<number>('qa-timer-seconds', 15);
+  const timerTotal = timerSeconds > 0 ? timerSeconds : 15;
+
   const total = questions.length;
   const atEnd = index >= total;
   const current = atEnd ? null : questions[index];
   const style = VIBE_STYLES[vibe];
+
+  const { remaining, done } = useCountdown(timerTotal, timerOn && !!current && !leaving, index);
+  const timeUp = timerOn && !!current && done;
+  useEffect(() => {
+    if (timeUp) tapLong();
+  }, [timeUp, index]);
 
   /** Throws the current card off-screen, then moves to the next or previous one. */
   const leave = (dir: 'next' | 'prev', then: () => void) => {
@@ -246,6 +259,18 @@ export const PlayStage: React.FC<PlayStageProps> = ({
               </span>
             )}
 
+            {timerOn && (
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-x-8 top-3 h-1 overflow-hidden rounded-full bg-slate-900/10 dark:bg-white/10 motion-reduce:hidden"
+              >
+                <div
+                  className={`h-full origin-left rounded-full ${timeUp ? 'bg-rose-600' : 'bg-rose-400'}`}
+                  style={{ width: `${(remaining / timerTotal) * 100}%` }}
+                />
+              </div>
+            )}
+
             {/* Floating hearts when saved */}
             {burst > 0 && (
               <span key={burst} aria-hidden className="pointer-events-none absolute inset-x-0 bottom-10 flex justify-center">
@@ -264,6 +289,38 @@ export const PlayStage: React.FC<PlayStageProps> = ({
                 {current.category || getVibe(vibe).label}
               </span>
               <div className="-mr-2 flex items-center gap-1">
+                {timerOn && (
+                  <>
+                    <span
+                      aria-live="off"
+                      className={`min-w-[2ch] text-right text-xs font-semibold tabular-nums ${timeUp ? 'text-rose-600 dark:text-rose-400' : 'text-slate-500 dark:text-slate-400'}`}
+                    >
+                      {timeUp ? "Time's up" : Math.ceil(remaining)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setTimerSeconds(nextTimerSeconds(timerTotal))}
+                      aria-label={`Timer length ${timerTotal} seconds. Change`}
+                      title="Change timer length"
+                      className="rounded-full px-1.5 py-1 text-xs font-semibold tabular-nums text-slate-400 transition hover:bg-white/70 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
+                    >
+                      {timerTotal}s
+                    </button>
+                  </>
+                )}
+                <span className="sr-only" aria-live="polite">
+                  {timeUp ? "Time's up" : ''}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setTimerOn(on => !on)}
+                  aria-pressed={timerOn}
+                  aria-label="Answer timer"
+                  title="Answer timer"
+                  className={`rounded-full p-2 transition hover:bg-white/70 dark:hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 ${timerOn ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
+                >
+                  <Timer className="h-[18px] w-[18px]" aria-hidden />
+                </button>
                 <span className="text-xs font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">
                   Q{index + 1}
                 </span>
