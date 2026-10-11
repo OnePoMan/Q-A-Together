@@ -35,7 +35,7 @@ export function TimerRow() {
           {timerSeconds}s per card
         </button>
       ) : (
-        <span className="px-2.5 py-1 text-sm text-slate-400 dark:text-slate-500">Off</span>
+        <span className="px-2.5 py-1 text-sm text-slate-500 dark:text-slate-400">Off</span>
       )}
     </div>
   );
