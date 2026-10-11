@@ -1,8 +1,10 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { DEFAULT_NAMES } from '../shared/brand';
-import { Download, Lock, Monitor, MonitorSmartphone, Moon, RotateCcw, Smartphone, Sun, Trash, X } from 'lucide-react';
+import { Download, FileUp, HardDriveDownload, Lock, Monitor, MonitorSmartphone, Moon, RotateCcw, Smartphone, Sun, Trash, X } from 'lucide-react';
 import type { ThemePreference } from '../hooks/useTheme';
 import type { DisplayPreference } from '../hooks/useDisplayMode';
+import { downloadBackup, parseBackup, restoreBackup } from '../lib/backup';
+import { IMPORTED_FLAG } from '../lib/transfer';
 
 interface SettingsDialogProps {
   open: boolean;
@@ -89,6 +91,31 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({
   onLockAdult,
 }) => {
   const ref = useRef<HTMLDialogElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [backupError, setBackupError] = useState('');
+
+  const onRestoreFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setBackupError('');
+    try {
+      const payload = parseBackup(await file.text());
+      if (!window.confirm('Restore this backup? OK = merge with this device, Cancel = abort. Nothing on this device is overwritten.')) return;
+      if (restoreBackup(payload, 'merge') === 0) {
+        setBackupError('That backup had nothing to restore.');
+        return;
+      }
+      try {
+        sessionStorage.setItem(IMPORTED_FLAG, '1');
+      } catch {
+        // ignore
+      }
+      window.location.reload();
+    } catch (err) {
+      setBackupError(err instanceof Error ? err.message : 'Could not read that file.');
+    }
+  };
 
   useEffect(() => {
     const dialog = ref.current;
@@ -202,6 +229,37 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({
             <span className="ml-auto text-xs text-slate-400 tabular-nums">{savedCount}</span>
           </button>
         </div>
+
+        <fieldset className="mt-6">
+          <legend className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-300">Backup</legend>
+          <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
+            Save your questions, memories and settings to a file, or merge a saved file back into this device.
+          </p>
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={downloadBackup}
+              className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
+            >
+              <HardDriveDownload className="h-4 w-4" aria-hidden />
+              Download backup
+            </button>
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
+            >
+              <FileUp className="h-4 w-4" aria-hidden />
+              Restore from file
+            </button>
+            <input ref={fileRef} type="file" accept="application/json,.json" onChange={onRestoreFile} className="hidden" aria-label="Backup file" />
+            {backupError && (
+              <p role="alert" className="px-1 text-xs text-red-600 dark:text-red-400">
+                {backupError}
+              </p>
+            )}
+          </div>
+        </fieldset>
 
         <p className="mt-6 text-center text-xs text-slate-400 dark:text-slate-500">
           Names, saves and history stay on this device. To avoid repeats and match your taste, recently seen, saved and skipped questions are sent with each request to the question generator (Google Gemini). 18+ cards never leave the device except to sync a room you start.

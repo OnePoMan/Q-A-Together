@@ -2,7 +2,7 @@
 // per-address, so the old site packs it into a link's #fragment (never sent to
 // any server) and the new site unpacks it after the user confirms.
 
-const KEYS = [
+export const DATA_KEYS = [
   'qa-saved',
   'qa-favorites',
   'qa-journal',
@@ -36,7 +36,7 @@ const fromBase64Url = (encoded: string) => {
 
 export function buildTransferLink(targetUrl: string): string {
   const data: Record<string, string> = {};
-  for (const key of KEYS) {
+  for (const key of DATA_KEYS) {
     try {
       const value = localStorage.getItem(key);
       if (value !== null) data[key] = value;
@@ -47,9 +47,9 @@ export function buildTransferLink(targetUrl: string): string {
   return `${targetUrl}/${PREFIX}${toBase64Url(JSON.stringify({ v: 1, data }))}`;
 }
 
-const isPlainObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+export const isPlainObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
-function merge(existing: unknown, incoming: unknown): unknown {
+export function merge(existing: unknown, incoming: unknown): unknown {
   if (Array.isArray(existing) && Array.isArray(incoming)) {
     const seen = new Set(existing.map(item => JSON.stringify(item)));
     return [...existing, ...incoming.filter(item => !seen.has(JSON.stringify(item)))];
@@ -78,7 +78,7 @@ export function importFromLocation(): boolean {
   if (!isPlainObject(payload) || payload.v !== 1 || !isPlainObject(payload.data)) return false;
   if (!window.confirm('Bring over your saved questions, memories and settings from the old address?')) return false;
 
-  for (const key of KEYS) {
+  for (const key of DATA_KEYS) {
     const raw = payload.data[key];
     if (typeof raw !== 'string') continue;
     try {

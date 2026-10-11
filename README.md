@@ -18,6 +18,7 @@ Conversation-starter questions for couples. Pick a vibe and get 20 fresh questio
 - **Card motion:** decks deal onto the table, cards flip in, tilt as you drag and fly off when swiped (all disabled with reduced motion)
 - **Friendly rate limiting:** if the firewall limit is hit, the app deals saved questions and shows a live countdown until fresh ones are available
 - **Works offline:** installable PWA with a built-in starter deck plus a cache of previously generated questions
+- **Backup & restore:** Settings → Backup downloads your saved questions, memories and settings as a JSON file, and merges them back from one later
 - **Private by default:** names, saved questions and history stay in the browser's local storage
 
 ## Architecture
