@@ -11,3 +11,8 @@ export function nextTimerSeconds(current: number): number {
   const i = TIMER_CHOICES.indexOf(current as (typeof TIMER_CHOICES)[number]);
   return TIMER_CHOICES[(i + 1) % TIMER_CHOICES.length];
 }
+
+/** Stored durations outside the supported choices fall back to 15 seconds. */
+export function sanitizeTimerSeconds(value: unknown): number {
+  return TIMER_CHOICES.find(c => c === value) ?? 15;
+}

@@ -17,6 +17,7 @@ import { QuestionCard } from './components/QuestionCard';
 import { RoomDialog } from './components/RoomDialog';
 import { SavedView } from './components/SavedView';
 import { SettingsDialog } from './components/SettingsDialog';
+import { TimerRow } from './components/TimerRow';
 import { Toast } from './components/Toast';
 import { VibePicker } from './components/VibePicker';
 import { VIBE_STYLES } from './components/vibeMeta';
@@ -378,6 +379,7 @@ const App: React.FC = () => {
                   : 'sticky bottom-0 z-10 -mx-4 mt-6 bg-linear-to-t from-slate-50 via-slate-50/90 to-transparent px-4 pt-6 pb-[calc(1rem+env(safe-area-inset-bottom))] dark:from-slate-950 dark:via-slate-950/90 sm:static sm:mx-0 sm:bg-none sm:p-0 sm:pt-2'
               }
             >
+              <TimerRow />
               <Button size="lg" onClick={() => deal()} isLoading={isLoading} className="w-full">
                 {!isLoading && <Sparkles className="h-5 w-5" aria-hidden />}
                 Deal 20 {getVibe(vibe).label} questions

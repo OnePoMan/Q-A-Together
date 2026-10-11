@@ -6,7 +6,7 @@ import { getVibe } from '../shared/vibes';
 import { VIBE_STYLES } from './vibeMeta';
 import { Button } from './Button';
 import { tapDouble, tapLight, tapLong } from '../utils/haptics';
-import { useLocalStorage } from '../hooks/useLocalStorage';
+import { useTimerSettings } from '../hooks/useTimerSettings';
 import { useCountdown } from '../hooks/useCountdown';
 import { nextTimerSeconds } from '../lib/countdown';
 
@@ -80,9 +80,7 @@ export const PlayStage: React.FC<PlayStageProps> = ({
   }, [deckKey]);
   const drag = useRef<{ x: number; y: number; id: number; horizontal: boolean | null } | null>(null);
 
-  const [timerOn, setTimerOn] = useLocalStorage<boolean>('qa-timer-on', false);
-  const [timerSeconds, setTimerSeconds] = useLocalStorage<number>('qa-timer-seconds', 15);
-  const timerTotal = timerSeconds > 0 ? timerSeconds : 15;
+  const { timerOn, setTimerOn, timerSeconds: timerTotal, setTimerSeconds } = useTimerSettings();
 
   const total = questions.length;
   const atEnd = index >= total;
