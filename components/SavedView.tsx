@@ -21,7 +21,7 @@ interface SavedViewProps {
 const chipClass = (active: boolean) =>
   `rounded-full px-3.5 py-1.5 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 ${
     active
-      ? 'bg-rose-500 text-white shadow-sm'
+      ? 'bg-rose-600 text-white shadow-sm'
       : 'bg-white dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-rose-50 dark:hover:bg-slate-800'
   }`;
 

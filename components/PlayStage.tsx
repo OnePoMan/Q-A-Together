@@ -87,7 +87,13 @@ export const PlayStage: React.FC<PlayStageProps> = ({
   const current = atEnd ? null : questions[index];
   const style = VIBE_STYLES[vibe];
 
-  const { remaining, done } = useCountdown(timerTotal, timerOn && !!current && !leaving, index);
+  // A length picked after time runs out applies from the next card, so the expired card stays expired.
+  const [cardSeconds, setCardSeconds] = useState(timerTotal);
+  useEffect(() => {
+    setCardSeconds(timerTotal);
+    // Deliberately not keyed on timerTotal: the length is re-read only when a new card starts.
+  }, [index, timerOn]);
+  const { remaining, done } = useCountdown(cardSeconds, timerOn && !!current && !leaving, index);
   const timeUp = timerOn && !!current && done;
   useEffect(() => {
     if (timeUp) tapLong();
@@ -264,7 +270,7 @@ export const PlayStage: React.FC<PlayStageProps> = ({
               >
                 <div
                   className={`h-full origin-left rounded-full ${timeUp ? 'bg-rose-600' : 'bg-rose-400'}`}
-                  style={{ width: `${(remaining / timerTotal) * 100}%` }}
+                  style={{ width: `${(remaining / cardSeconds) * 100}%` }}
                 />
               </div>
             )}
@@ -293,17 +299,20 @@ export const PlayStage: React.FC<PlayStageProps> = ({
                       aria-live="off"
                       className={`min-w-[2ch] text-right text-xs font-semibold tabular-nums ${timeUp ? 'text-rose-600 dark:text-rose-400' : 'text-slate-500 dark:text-slate-400'}`}
                     >
-                      {timeUp ? "Time's up" : Math.ceil(remaining)}
+                      {timeUp ? "Time's up" : `${Math.ceil(remaining)}s`}
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => setTimerSeconds(nextTimerSeconds(timerTotal))}
-                      aria-label={`Timer length ${timerTotal} seconds. Change`}
-                      title="Change timer length"
-                      className="rounded-full px-1.5 py-1 text-xs font-semibold tabular-nums text-slate-400 transition hover:bg-white/70 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
-                    >
-                      {timerTotal}s
-                    </button>
+                    {/* The length is only adjustable between countdowns, so it never sits beside a running number. */}
+                    {timeUp && (
+                      <button
+                        type="button"
+                        onClick={() => setTimerSeconds(nextTimerSeconds(timerTotal))}
+                        aria-label={`Timer length ${timerTotal} seconds. Change`}
+                        title="Change timer length"
+                        className="rounded-full px-1.5 py-1 text-xs font-semibold tabular-nums text-slate-500 dark:text-slate-400 transition hover:bg-white/70 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
+                      >
+                        {timerTotal}s
+                      </button>
+                    )}
                   </>
                 )}
                 <span className="sr-only" aria-live="polite">
