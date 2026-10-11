@@ -1,6 +1,6 @@
 // Backup & restore of on-device data as a JSON file the user keeps.
 
-import { DATA_KEYS, isPlainObject, merge } from './transfer';
+import { DATA_KEYS, isPlainObject, mergeKey } from './transfer';
 
 const APP_ID = 'qa-together';
 const MAX_BYTES = 5_000_000;
@@ -61,7 +61,7 @@ export function restoreBackup(payload: BackupPayload, mode: 'merge' | 'replace')
     try {
       const incoming = JSON.parse(raw);
       const current = mode === 'merge' ? localStorage.getItem(key) : null;
-      const value = current === null ? incoming : merge(JSON.parse(current), incoming);
+      const value = current === null ? incoming : mergeKey(key, JSON.parse(current), incoming);
       localStorage.setItem(key, JSON.stringify(value));
       restored++;
     } catch {

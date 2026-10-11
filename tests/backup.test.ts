@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { backupFileName, createBackup, parseBackup, restoreBackup, type BackupPayload } from '../lib/backup';
-import { isPlainObject, merge } from '../lib/transfer';
+import { isPlainObject, merge, mergeKey } from '../lib/transfer';
 
 const store = new Map<string, string>();
 (globalThis as { localStorage?: unknown }).localStorage = {
@@ -54,15 +54,15 @@ describe('parseBackup', () => {
 describe('restoreBackup', () => {
   it('merge keeps existing and unions arrays', () => {
     store.set('qa-saved', '["a","b"]');
-    store.set('qa-names', '{"0":"Me"}');
+    store.set('qa-answered', '{"q1":true}');
     store.set('qa-theme', '"dark"');
     const n = restoreBackup(
-      payload({ 'qa-saved': '["b","c"]', 'qa-names': '{"0":"X","1":"You"}', 'qa-theme': '"light"', 'qa-vibe': '"deep"' }),
+      payload({ 'qa-saved': '["b","c"]', 'qa-answered': '{"q1":false,"q2":true}', 'qa-theme': '"light"', 'qa-vibe': '"deep"' }),
       'merge',
     );
     expect(n).toBe(4);
     expect(JSON.parse(store.get('qa-saved')!)).toEqual(['a', 'b', 'c']);
-    expect(JSON.parse(store.get('qa-names')!)).toEqual({ '0': 'Me', '1': 'You' });
+    expect(JSON.parse(store.get('qa-answered')!)).toEqual({ q1: true, q2: true });
     expect(store.get('qa-theme')).toBe('"dark"');
     expect(store.get('qa-vibe')).toBe('"deep"');
   });
@@ -100,5 +100,26 @@ describe('transfer merge', () => {
     expect(isPlainObject({})).toBe(true);
     expect(isPlainObject([])).toBe(false);
     expect(isPlainObject(null)).toBe(false);
+  });
+});
+
+describe('names merge', () => {
+  it('keeps names set on this device and fills blank slots', () => {
+    expect(mergeKey('qa-names', ['Ethan', ''], ['E', 'Brianna'])).toEqual(['Ethan', 'Brianna']);
+    expect(mergeKey('qa-names', ['', ''], ['Ethan', 'Brianna'])).toEqual(['Ethan', 'Brianna']);
+    expect(mergeKey('qa-names', ['Ethan', 'Bri'], ['Ethan', 'Brianna'])).toEqual(['Ethan', 'Bri']);
+  });
+  it('never grows the pair and ignores a malformed incoming value', () => {
+    expect(mergeKey('qa-names', ['A', 'B'], ['C', 'D'])).toHaveLength(2);
+    expect(mergeKey('qa-names', ['A', ''], 'oops')).toEqual(['A', '']);
+    expect(mergeKey('qa-names', null, ['A', 'B', 'C'])).toEqual(['A', 'B']);
+  });
+  it('restoreBackup merges names as a pair', () => {
+    store.set('qa-names', JSON.stringify(['', '']));
+    restoreBackup(payload({ 'qa-names': JSON.stringify(['Ethan', 'Brianna']) }), 'merge');
+    expect(JSON.parse(store.get('qa-names')!)).toEqual(['Ethan', 'Brianna']);
+  });
+  it('other keys still use the generic merge', () => {
+    expect(mergeKey('qa-saved', [1], [1, 2])).toEqual([1, 2]);
   });
 });

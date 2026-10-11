@@ -52,6 +52,20 @@ export function buildTransferLink(targetUrl: string): string {
 
 export const isPlainObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
+const isNamePair = (v: unknown): v is [string, string] =>
+  Array.isArray(v) && v.length >= 2 && typeof v[0] === 'string' && typeof v[1] === 'string';
+
+/** Partner names are a fixed pair: keep each name already set here, fill blank slots from the incoming pair. */
+function mergeNames(existing: unknown, incoming: unknown): unknown {
+  if (!isNamePair(incoming)) return existing;
+  if (!isNamePair(existing)) return incoming.slice(0, 2);
+  return [0, 1].map(i => (existing[i].trim() ? existing[i] : incoming[i]));
+}
+
+/** Per-key merge: names are a pair, everything else uses the generic merge. */
+export const mergeKey = (key: string, existing: unknown, incoming: unknown): unknown =>
+  key === 'qa-names' ? mergeNames(existing, incoming) : merge(existing, incoming);
+
 export function merge(existing: unknown, incoming: unknown): unknown {
   if (Array.isArray(existing) && Array.isArray(incoming)) {
     const seen = new Set(existing.map(item => JSON.stringify(item)));
@@ -87,7 +101,7 @@ export function importFromLocation(): boolean {
     try {
       const incoming = JSON.parse(raw);
       const current = localStorage.getItem(key);
-      const value = current === null ? incoming : merge(JSON.parse(current), incoming);
+      const value = current === null ? incoming : mergeKey(key, JSON.parse(current), incoming);
       localStorage.setItem(key, JSON.stringify(value));
     } catch {
       // skip malformed entry
